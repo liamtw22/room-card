@@ -1,0 +1,23 @@
+{
+  "name": "room-card",
+  "version": "1.0.0",
+  "description": "Home Assistant room card with temperature, humidity and device controls",
+  "main": "room-card.js",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "serve": "rollup -c -w --configPlugin serve"
+  },
+  "keywords": ["home-assistant", "lovelace", "custom-card"],
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.5",
+    "rollup": "^4.6.1",
+    "rollup-plugin-terser": "^7.0.2",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "custom-card-helpers": "^1.9.0",
+    "lit": "^3.1.0"
+  }
+}
