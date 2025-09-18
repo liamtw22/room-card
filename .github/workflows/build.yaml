@@ -1,42 +1,29 @@
-name: Build and Release
+name: Build
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  release:
-    types: [published]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - uses: actions/setup-node@v4
       with:
         node-version: '18'
     
-    - name: Install dependencies
-      run: npm install
+    - run: npm install
     
-    - name: Build
-      run: npm run build
+    - run: npm run build
     
-    - name: Upload build artifact
-      uses: actions/upload-artifact@v4
+    # Only upload artifacts for non-release builds
+    - uses: actions/upload-artifact@v4
       with:
-        name: room-card
+        name: room-card-dev
         path: dist/room-card.js
-    
-    - name: Upload to release
-      if: github.event_name == 'release'
-      uses: softprops/action-gh-release@v1
-      with:
-        files: dist/room-card.js
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        retention-days: 7
