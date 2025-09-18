@@ -2,14 +2,21 @@
   "name": "room-card",
   "version": "1.0.0",
   "description": "Home Assistant room card with temperature, humidity and device controls",
-  "main": "room-card.js",
+  "main": "dist/room-card.js",
   "type": "module",
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "clean": "rm -f room-card.js room-card.js.map"
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean"
   },
-  "keywords": ["home-assistant", "lovelace", "custom-card"],
+  "keywords": ["home-assistant", "lovelace", "custom-card", "room-card"],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/room-card"
+  },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.5",
