@@ -1,5 +1,6 @@
 {
   "name": "Room Card",
   "render_readme": true,
-  "filename": "room-card.js"
+  "filename": "room-card.js",
+  "javascript_type": "module"
 }
