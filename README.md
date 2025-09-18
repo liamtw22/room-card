@@ -339,11 +339,8 @@ Contributions are welcome! Please read the contributing guidelines before submit
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Credits
-
-- Inspired by Home Assistant's native thermostat card
 - Icons from [Material Design Icons](https://materialdesignicons.com/)
 - Built with [Lit](https://lit.dev/) and [TypeScript](https://www.typescriptlang.org/)
-- Architecture based on [lovelace-navbar-card](https://github.com/joseluis9595/lovelace-navbar-card)
 
 ## Acknowledgments
 
