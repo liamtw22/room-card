@@ -1,26 +1,23 @@
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
-import terser from '@rollup/plugin-terser';
-
-const production = !process.env.ROLLUP_WATCH;
 
 export default {
   input: 'src/room-card.ts',
   output: {
     file: 'dist/room-card.js',
     format: 'es',
-    sourcemap: !production
+    sourcemap: false,  // No sourcemap for cleaner release
+    indent: '  ',       // Readable indentation
+    generatedCode: {
+      constBindings: true
+    }
   },
   plugins: [
     resolve(),
     typescript({
-      sourceMap: !production,
-      inlineSources: !production
-    }),
-    production && terser({
-      format: {
-        comments: false
-      }
+      sourceMap: false,
+      inlineSources: false
     })
-  ].filter(Boolean)
+    // NO terser plugin - keep it readable
+  ]
 };
