@@ -1,8 +1,16 @@
 import { LitElement, html, css, TemplateResult, PropertyValues, CSSResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCard, hasAction, ActionHandlerEvent, handleAction } from 'custom-card-helpers';
+
+// Import components to ensure they register themselves
+import './components/circular-slider';
+import './components/device-chip';
+import './components/temperature-display';
+import './room-card-editor';
+
+// Import utilities and types
 import { actionHandler } from './utils/action-handler';
-import { RoomCardConfig, RoomData, ProcessedDevice } from './types';
+import { RoomCardConfig, RoomData, ProcessedDevice, DeviceConfig } from './types';
 import { DEFAULT_CONFIG, TEMPERATURE_RANGES, validateConfig } from './config';
 import { HapticFeedback } from './utils/haptic-feedback';
 import { getTemperatureColor } from './utils/color-utils';
@@ -54,7 +62,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
     this._roomData = {
       temperature,
       humidity,
-      temperature_unit: this._config.temperature_unit || 'C',
+      temperature_unit: this._config.temperature_unit || 'F',
       devices,
       background_color: getTemperatureColor(temperature, this._config.background_colors)
     };
@@ -158,13 +166,13 @@ export class RoomCard extends LitElement implements LovelaceCard {
         ${this._config?.show_temperature && temperature !== undefined ? html`
           <div class="sensor temperature">
             <ha-icon icon="mdi:thermometer"></ha-icon>
-            <span>${temperature}°${temperature_unit}</span>
+            <span>${temperature.toFixed(1)}°${temperature_unit}</span>
           </div>
         ` : ''}
         ${this._config?.show_humidity && humidity !== undefined ? html`
           <div class="sensor humidity">  
             <ha-icon icon="mdi:water-percent"></ha-icon>
-            <span>${humidity}%</span>
+            <span>${humidity.toFixed(0)}%</span>
           </div>
         ` : ''}
       </div>
@@ -182,9 +190,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
         
         <device-chip
           .device=${device}
-          @click=${() => this._handleDeviceToggle(device)}
-          @action=${(e: ActionHandlerEvent) => this._handleAction(e, device)}
-          .actionHandler=${actionHandler}
+          @device-toggle=${() => this._handleDeviceToggle(device)}
         ></device-chip>
       </div>
     `;
@@ -229,6 +235,10 @@ export class RoomCard extends LitElement implements LovelaceCard {
         color: var(--secondary-text-color);
       }
       
+      .sensor ha-icon {
+        --mdc-icon-size: 18px;
+      }
+      
       .devices-container {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -265,8 +275,12 @@ export class RoomCard extends LitElement implements LovelaceCard {
     return {
       type: 'custom:room-card',
       name: 'Living Room',
+      temperature_sensor: '',
+      humidity_sensor: '',
       show_temperature: true,
       show_humidity: true,
+      temperature_unit: 'F',
+      haptic_feedback: true,
       devices: []
     };
   }
@@ -278,5 +292,14 @@ export class RoomCard extends LitElement implements LovelaceCard {
   type: 'room-card',
   name: 'Room Card',
   preview: false,
-  description: 'Room card with temperature, humidity and device controls'
+  description: 'Room card with temperature, humidity and device controls',
+  documentationURL: 'https://github.com/yourusername/room-card'
 });
+
+// Declare global types for TypeScript
+declare global {
+  interface HTMLElementTagNameMap {
+    'room-card': RoomCard;
+    'room-card-editor': typeof import('./room-card-editor').RoomCardEditor;
+  }
+}
