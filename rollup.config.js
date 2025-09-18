@@ -7,7 +7,7 @@ const production = !process.env.ROLLUP_WATCH;
 export default {
   input: 'src/room-card.ts',
   output: {
-    file: 'room-card.js',
+    file: 'dist/room-card.js',
     format: 'es',
     sourcemap: !production
   },
