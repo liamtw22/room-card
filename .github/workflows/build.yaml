@@ -34,5 +34,13 @@ jobs:
         name: room-card
         path: room-card.js
     
-    # Only run on releases
     - name: Upload to release
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./room-card.js
+        asset_name: room-card.js
+        asset_content_type: application/javascript
