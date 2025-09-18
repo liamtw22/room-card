@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Home Assistant room card with temperature, humidity and device controls",
   "main": "room-card.js",
+  "type": "module",
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
