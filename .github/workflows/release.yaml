@@ -2,7 +2,7 @@ name: Release
 
 on:
   release:
-    types: [created]
+    types: [published]  # Changed from 'created' to 'published'
   workflow_dispatch:  # This allows manual triggering
 
 permissions:
