@@ -1,342 +1,155 @@
+// utils/action-handler.ts
 import { ActionHandlerDetail, ActionHandlerOptions } from 'custom-card-helpers';
-import { HapticFeedback } from './haptic-feedback';
 
-export interface ActionHandlerEvent extends CustomEvent {
-  detail: ActionHandlerDetail;
-}
+export const actionHandler = (options: ActionHandlerOptions = {}) => {
+  const hasHold = options.hasHold ?? true;
+  const hasDoubleClick = options.hasDoubleClick ?? true;
+  const disabled = options.disabled ?? false;
 
-interface ActionHandlerElement extends HTMLElement {
-  holdTime?: number;
-  bind?: (element: ActionHandlerElement, options?: ActionHandlerOptions) => void;
-}
-
-class ActionHandler {
-  private holdTime: number;
-  private holdTimeout?: number;
-  private ripple?: HTMLElement;
-  private timer?: number;
-  private held = false;
-  private cooldownStart = false;
-  private cooldownEnd = false;
-  private element?: ActionHandlerElement;
-  private startX = 0;
-  private startY = 0;
-
-  constructor(element: ActionHandlerElement, options: ActionHandlerOptions = {}) {
-    this.element = element;
-    this.holdTime = options.holdTime ?? 500;
-
-    element.addEventListener('contextmenu', (e: Event) => {
-      const ev = e || window.event;
-      if (ev.preventDefault) {
-        ev.preventDefault();
-      }
-      if (ev.stopPropagation) {
-        ev.stopPropagation();
-      }
-      ev.cancelBubble = true;
-      ev.returnValue = false;
-      return false;
-    });
-
-    const clickStart = (ev: TouchEvent | MouseEvent): void => {
-      if (this.cooldownStart) {
-        return;
-      }
-
-      this.held = false;
-      let x: number;
-      let y: number;
-
-      if ('touches' in ev) {
-        x = ev.touches[0].clientX;
-        y = ev.touches[0].clientY;
-      } else {
-        x = ev.clientX;
-        y = ev.clientY;
-      }
-
-      this.startX = x;
-      this.startY = y;
-
-      this.cooldownStart = true;
-      window.setTimeout(() => (this.cooldownStart = false), 100);
-
-      if (options.hasHold) {
-        this.holdTimeout = window.setTimeout(() => {
-          this.held = true;
-          HapticFeedback.medium();
-          this.fireEvent('action', { action: 'hold' });
-        }, this.holdTime);
-      }
-
-      const ripplePromise = this.createRipple(x, y);
-      if (options.hasDoubleClick) {
-        const clickEndTimeout = (ev: TouchEvent | MouseEvent): void => {
-          if ('touches' in ev) {
-            x = ev.touches[0].clientX;
-            y = ev.touches[0].clientY;
-          } else {
-            x = ev.clientX;
-            y = ev.clientY;
-          }
-
-          if (Math.abs(x - this.startX) > 50 || Math.abs(y - this.startY) > 50) {
-            return;
-          }
-
-          if (this.timer) {
-            clearTimeout(this.timer);
-            this.timer = undefined;
-            HapticFeedback.light();
-            this.fireEvent('action', { action: 'double_tap' });
-          } else {
-            this.timer = window.setTimeout(() => {
-              this.timer = undefined;
-              if (options.hasHold && this.held) {
-                return;
-              }
-              HapticFeedback.light();
-              this.fireEvent('action', { action: 'tap' });
-            }, 250);
-          }
-        };
-        element.addEventListener('click', clickEndTimeout);
-      } else {
-        element.addEventListener('click', () => {
-          if (this.cooldownEnd || (options.hasHold && this.held)) {
-            return;
-          }
-          if (Math.abs(x - this.startX) > 50 || Math.abs(y - this.startY) > 50) {
-            return;
-          }
-          HapticFeedback.light();
-          this.fireEvent('action', { action: 'tap' });
-        });
-      }
-
-      ripplePromise.then((ripple) => {
-        this.ripple = ripple;
-      });
-    };
-
-    const clickEnd = (): void => {
-      this.cooldownEnd = true;
-      window.setTimeout(() => (this.cooldownEnd = false), 100);
-      if (this.holdTimeout) {
-        clearTimeout(this.holdTimeout);
-        this.holdTimeout = undefined;
-      }
-      if (this.ripple) {
-        this.destroyRipple(this.ripple);
-        this.ripple = undefined;
-      }
-    };
-
-    const clickCancel = (): void => {
-      this.cooldownEnd = true;
-      window.setTimeout(() => (this.cooldownEnd = false), 100);
-      if (this.holdTimeout) {
-        clearTimeout(this.holdTimeout);
-        this.holdTimeout = undefined;
-      }
-      if (this.ripple) {
-        this.destroyRipple(this.ripple);
-        this.ripple = undefined;
-      }
-    };
-
-    element.addEventListener('touchstart', clickStart, { passive: true });
-    element.addEventListener('touchend', clickEnd);
-    element.addEventListener('touchcancel', clickCancel);
-
-    element.addEventListener('mousedown', clickStart, { passive: true });
-    element.addEventListener('mouseup', clickEnd);
-    element.addEventListener('mouseleave', clickCancel);
-  }
-
-  private fireEvent(type: string, detail: ActionHandlerDetail): void {
-    if (!this.element) return;
-    
-    const event = new CustomEvent(type, {
-      detail,
-      bubbles: true,
-      composed: true,
-    });
-    this.element.dispatchEvent(event);
-  }
-
-  private async createRipple(x: number, y: number): Promise<HTMLElement> {
-    if (!this.element) {
-      return document.createElement('div');
-    }
-
-    const rect = this.element.getBoundingClientRect();
-    const ripple = document.createElement('div');
-    ripple.className = 'action-handler-ripple';
-    
-    // Calculate ripple size
-    const size = Math.max(rect.width, rect.height) * 2;
-    
-    // Position ripple at click point
-    const left = x - rect.left - size / 2;
-    const top = y - rect.top - size / 2;
-    
-    ripple.style.cssText = `
-      position: absolute;
-      width: ${size}px;
-      height: ${size}px;
-      left: ${left}px;
-      top: ${top}px;
-      border-radius: 50%;
-      background-color: currentColor;
-      opacity: 0;
-      pointer-events: none;
-      transform: scale(0);
-      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
-                  opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-    `;
-    
-    // Ensure parent has position relative
-    const computedStyle = window.getComputedStyle(this.element);
-    if (computedStyle.position === 'static') {
-      this.element.style.position = 'relative';
-    }
-    
-    this.element.appendChild(ripple);
-    
-    // Trigger animation
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    ripple.style.transform = 'scale(1)';
-    ripple.style.opacity = '0.2';
-    
-    return ripple;
-  }
-
-  private destroyRipple(ripple: HTMLElement): void {
-    ripple.style.opacity = '0';
-    setTimeout(() => {
-      if (ripple.parentNode) {
-        ripple.parentNode.removeChild(ripple);
-      }
-    }, 500);
-  }
-}
-
-export const actionHandlerDirective = {
-  bind(element: ActionHandlerElement, options: ActionHandlerOptions = {}): void {
-    new ActionHandler(element, options);
-  },
-};
-
-export const actionHandler = (
-  options: ActionHandlerOptions = {}
-): any => {
   return {
-    update(part: any): void {
-      const element = part.element as ActionHandlerElement;
+    handlePointerDown(e: PointerEvent): void {
+      if (disabled) return;
       
-      if (!element.bind) {
-        element.bind = (el: ActionHandlerElement, opts?: ActionHandlerOptions) => {
-          new ActionHandler(el, opts || options);
-        };
-        element.bind(element, options);
+      const target = e.currentTarget as HTMLElement;
+      const detail: Partial<ActionHandlerDetail> = {
+        action: 'tap'
+      };
+      
+      let timer: number | undefined;
+      let clickCount = 0;
+      
+      const handleUp = (): void => {
+        clearTimeout(timer);
+        clickCount++;
+        
+        if (clickCount === 1) {
+          timer = window.setTimeout(() => {
+            if (clickCount === 1) {
+              target.dispatchEvent(new CustomEvent('action', {
+                detail: { ...detail, action: 'tap' },
+                bubbles: true,
+                composed: true
+              }));
+            } else if (clickCount === 2 && hasDoubleClick) {
+              target.dispatchEvent(new CustomEvent('action', {
+                detail: { ...detail, action: 'double_tap' },
+                bubbles: true,
+                composed: true
+              }));
+            }
+            clickCount = 0;
+          }, hasDoubleClick ? 250 : 0);
+        }
+        
+        target.removeEventListener('pointerup', handleUp);
+        target.removeEventListener('pointercancel', handleUp);
+      };
+      
+      if (hasHold) {
+        timer = window.setTimeout(() => {
+          target.dispatchEvent(new CustomEvent('action', {
+            detail: { ...detail, action: 'hold' },
+            bubbles: true,
+            composed: true
+          }));
+          clickCount = 0;
+        }, 500);
       }
-    },
+      
+      target.addEventListener('pointerup', handleUp);
+      target.addEventListener('pointercancel', handleUp);
+    }
   };
 };
 
-/**
- * Helper function to determine if an element has action configuration
- */
-export function hasAction(config?: any): boolean {
-  return config?.tap_action || config?.hold_action || config?.double_tap_action;
+// utils/haptic-feedback.ts
+export class HapticFeedback {
+  private static navigator = window.navigator as any;
+
+  static vibrate(pattern: 'light' | 'medium' | 'heavy' | 'selection' | number | number[]): void {
+    if (!this.navigator.vibrate) return;
+
+    const patterns = {
+      light: 50,
+      medium: 100,
+      heavy: 200,
+      selection: 10
+    };
+
+    const vibrationPattern = typeof pattern === 'string' 
+      ? patterns[pattern] || 50 
+      : pattern;
+
+    try {
+      this.navigator.vibrate(vibrationPattern);
+    } catch (e) {
+      // Vibration API not supported or failed
+    }
+  }
+
+  static canVibrate(): boolean {
+    return 'vibrate' in this.navigator;
+  }
 }
 
-/**
- * Helper function to get action configuration
- */
-export function getActionConfig(
-  config: any,
-  action: 'tap' | 'hold' | 'double_tap'
-): any {
-  const actionConfig = config?.[`${action}_action`];
-  
-  if (!actionConfig) {
-    return undefined;
+// utils/color-utils.ts
+import { TemperatureColors } from '../types';
+import { 
+  DEFAULT_TEMPERATURE_COLORS, 
+  TEMPERATURE_RANGES, 
+  TEMPERATURE_RANGES_CELSIUS 
+} from '../config';
+
+export function getTemperatureColor(
+  temperature: number | undefined,
+  customColors?: TemperatureColors,
+  unit: string = 'F'
+): string {
+  if (temperature === undefined) {
+    return 'var(--card-background-color)';
   }
-  
-  // Handle 'none' action
-  if (actionConfig.action === 'none') {
-    return undefined;
-  }
-  
-  return actionConfig;
+
+  const colors = customColors || DEFAULT_TEMPERATURE_COLORS;
+  const ranges = unit === 'C' ? TEMPERATURE_RANGES_CELSIUS : TEMPERATURE_RANGES;
+
+  if (temperature < ranges.cool.min) return colors.cold;
+  if (temperature < ranges.comfortable.min) return colors.cool;
+  if (temperature < ranges.warm.min) return colors.comfortable;
+  if (temperature < ranges.hot.min) return colors.warm;
+  return colors.hot;
 }
 
-/**
- * Helper to handle common action patterns
- */
-export function handleActionConfig(
-  element: HTMLElement,
-  hass: any,
-  config: any,
-  action: 'tap' | 'hold' | 'double_tap'
-): void {
-  const actionConfig = getActionConfig(config, action);
-  
-  if (!actionConfig) {
-    return;
-  }
-  
-  switch (actionConfig.action) {
-    case 'toggle':
-      if (config.entity) {
-        const domain = config.entity.split('.')[0];
-        const service = hass.states[config.entity]?.state === 'on' ? 'turn_off' : 'turn_on';
-        hass.callService(domain, service, { entity_id: config.entity });
-      }
-      break;
-      
-    case 'call-service':
-      if (actionConfig.service) {
-        const [domain, service] = actionConfig.service.split('.');
-        hass.callService(
-          domain,
-          service,
-          actionConfig.service_data || {},
-          actionConfig.target || {}
-        );
-      }
-      break;
-      
-    case 'navigate':
-      if (actionConfig.navigation_path) {
-        history.pushState(null, '', actionConfig.navigation_path);
-        const event = new Event('location-changed', {
-          bubbles: true,
-          composed: true,
-        });
-        window.dispatchEvent(event);
-      }
-      break;
-      
-    case 'url':
-      if (actionConfig.url_path) {
-        window.open(actionConfig.url_path, actionConfig.new_tab !== false ? '_blank' : '_self');
-      }
-      break;
-      
-    case 'more-info':
-      if (config.entity || actionConfig.entity) {
-        const entityId = actionConfig.entity || config.entity;
-        const event = new CustomEvent('hass-more-info', {
-          detail: { entityId },
-          bubbles: true,
-          composed: true,
-        });
-        element.dispatchEvent(event);
-      }
-      break;
-  }
+export function interpolateColor(
+  color1: string,
+  color2: string,
+  factor: number
+): string {
+  // Simple color interpolation
+  // This is a basic implementation - could be enhanced with proper color space conversion
+  const hex2rgb = (hex: string): [number, number, number] => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result 
+      ? [
+          parseInt(result[1], 16),
+          parseInt(result[2], 16),
+          parseInt(result[3], 16)
+        ]
+      : [0, 0, 0];
+  };
+
+  const rgb2hex = (r: number, g: number, b: number): string => {
+    return '#' + [r, g, b].map(x => {
+      const hex = Math.round(x).toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    }).join('');
+  };
+
+  const [r1, g1, b1] = hex2rgb(color1);
+  const [r2, g2, b2] = hex2rgb(color2);
+
+  const r = r1 + (r2 - r1) * factor;
+  const g = g1 + (g2 - g1) * factor;
+  const b = b1 + (b2 - b1) * factor;
+
+  return rgb2hex(r, g, b);
 }
