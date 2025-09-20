@@ -1,7 +1,6 @@
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 import json from '@rollup/plugin-json';
-import terser from '@rollup/plugin-terser';
 
 const dev = process.env.ROLLUP_WATCH;
 
@@ -10,11 +9,7 @@ export default {
   output: {
     file: 'dist/room-card.js',
     format: 'es',
-    sourcemap: dev ? true : false,
-    compact: !dev,
-    generatedCode: {
-      constBindings: true
-    }
+    sourcemap: false
   },
   plugins: [
     resolve({
@@ -23,21 +18,12 @@ export default {
     }),
     json(),
     typescript({
-      sourceMap: dev,
-      inlineSources: dev,
+      sourceMap: false,
+      inlineSources: false,
       tsconfig: './tsconfig.json'
-    }),
-    !dev && terser({
-      mangle: {
-        safari10: true
-      },
-      format: {
-        comments: false
-      }
     })
-  ].filter(Boolean),
+  ],
   preserveEntrySignatures: false,
-  external: [],
   onwarn(warning, warn) {
     // Skip certain warnings
     if (warning.code === 'THIS_IS_UNDEFINED') return;

@@ -1,22 +1,15 @@
 import { LitElement, html, css, TemplateResult, CSSResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCardEditor, fireEvent } from 'custom-card-helpers';
-import { RoomCardConfig, DeviceConfig } from './types';
-import { DEVICE_ICONS } from './config';
+import { RoomCardConfig } from './types';
 
 @customElement('room-card-editor')
 export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config?: RoomCardConfig;
-  @state() private _helpers?: any;
 
   public setConfig(config: RoomCardConfig): void {
     this._config = { ...config };
-    this.loadHelpers();
-  }
-
-  private async loadHelpers(): Promise<void> {
-    this._helpers = await (window as any).loadCardHelpers?.();
   }
 
   private _valueChanged(ev: any): void {

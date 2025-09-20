@@ -1,42 +1,61 @@
+// utils/color-utils.ts
 import { TemperatureColors } from '../types';
-import { TEMPERATURE_RANGES, DEFAULT_TEMPERATURE_COLORS } from '../config';
+import { 
+  DEFAULT_TEMPERATURE_COLORS, 
+  TEMPERATURE_RANGES
+} from '../config';
 
 export function getTemperatureColor(
-  temperature: number | undefined, 
-  colors: TemperatureColors = DEFAULT_TEMPERATURE_COLORS
+  temperature: number | undefined,
+  customColors?: TemperatureColors
 ): string {
   if (temperature === undefined) {
-    return colors.comfortable;
+    return 'var(--card-background-color)';
   }
 
-  for (const [range, { min, max }] of Object.entries(TEMPERATURE_RANGES)) {
-    if (temperature >= min && temperature < max) {
-      return colors[range as keyof TemperatureColors];
-    }
-  }
+  const colors = customColors || DEFAULT_TEMPERATURE_COLORS;
+  
+  // Default to Fahrenheit ranges
+  const ranges = TEMPERATURE_RANGES;
 
-  return colors.comfortable;
+  if (temperature < ranges.cool.min) return colors.cold;
+  if (temperature < ranges.comfortable.min) return colors.cool;
+  if (temperature < ranges.warm.min) return colors.comfortable;
+  if (temperature < ranges.hot.min) return colors.warm;
+  return colors.hot;
 }
 
-export function interpolateColor(color1: string, color2: string, factor: number): string {
-  // Simple color interpolation for smooth transitions
-  const rgb1 = hexToRgb(color1);
-  const rgb2 = hexToRgb(color2);
-  
-  if (!rgb1 || !rgb2) return color1;
-  
-  const r = Math.round(rgb1.r + (rgb2.r - rgb1.r) * factor);
-  const g = Math.round(rgb1.g + (rgb2.g - rgb1.g) * factor);
-  const b = Math.round(rgb1.b + (rgb2.b - rgb1.b) * factor);
-  
-  return `rgb(${r}, ${g}, ${b})`;
-}
+export function interpolateColor(
+  color1: string,
+  color2: string,
+  factor: number
+): string {
+  // Simple color interpolation
+  // This is a basic implementation - could be enhanced with proper color space conversion
+  const hex2rgb = (hex: string): [number, number, number] => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result 
+      ? [
+          parseInt(result[1], 16),
+          parseInt(result[2], 16),
+          parseInt(result[3], 16)
+        ]
+      : [0, 0, 0];
+  };
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null;
+  const rgb2hex = (r: number, g: number, b: number): string => {
+    return '#' + [r, g, b].map(x => {
+      const hex = Math.round(x).toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    }).join('');
+  };
+
+  const [r1, g1, b1] = hex2rgb(color1);
+  const [r2, g2, b2] = hex2rgb(color2);
+
+  const r = r1 + (r2 - r1) * factor;
+  const g = g1 + (g2 - g1) * factor;
+  const b = b1 + (b2 - b1) * factor;
+
+  return rgb2hex(r, g, b);
 }

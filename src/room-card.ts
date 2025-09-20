@@ -10,7 +10,6 @@ import { customElement, property, state } from 'lit/decorators.js';
 import {
   HomeAssistant,
   LovelaceCard,
-  LovelaceCardConfig,
   ActionHandlerEvent,
   handleAction,
   hasAction
@@ -24,17 +23,13 @@ import {
   RoomCardConfig, 
   RoomData, 
   ProcessedDevice, 
-  DeviceConfig,
-  TemperatureColors 
+  DeviceConfig
 } from './types';
 
 // Import config and validation
 import { 
   DEFAULT_CONFIG, 
-  TEMPERATURE_RANGES,
-  TEMPERATURE_RANGES_CELSIUS,
   validateConfig,
-  getDeviceDefaults,
   mergeDeviceConfig 
 } from './config';
 
@@ -43,16 +38,8 @@ import { actionHandler } from './utils/action-handler';
 import { HapticFeedback } from './utils/haptic-feedback';
 import { getTemperatureColor } from './utils/color-utils';
 
-// Declare global for window.customCards
-declare global {
-  interface Window {
-    customCards: Array<object>;
-  }
-  interface HTMLElementTagNameMap {
-    'room-card': RoomCard;
-    'room-card-editor': any;
-  }
-}
+// Import editor
+import './room-card-editor';
 
 // Register the card
 window.customCards = window.customCards || [];
@@ -75,10 +62,6 @@ export class RoomCard extends LitElement implements LovelaceCard {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config?: RoomCardConfig;
   @state() private _roomData?: RoomData;
-
-  // Action handling state
-  private _holdTimeoutId?: number;
-  private _holdTriggered = false;
   
   public setConfig(config: RoomCardConfig): void {
     try {
@@ -178,8 +161,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
       devices,
       background_color: getTemperatureColor(
         temperature, 
-        this._config.background_colors,
-        this._config.temperature_unit
+        this._config.background_colors
       )
     };
   }
@@ -220,7 +202,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
 
     // Haptic feedback
     if (this._config?.haptic_feedback) {
-      HapticFeedback.vibrate('selection');
+      HapticFeedback.vibrate(50);
     }
 
     try {
@@ -279,7 +261,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
 
     // Haptic feedback
     if (this._config?.haptic_feedback) {
-      HapticFeedback.vibrate('light');
+      HapticFeedback.vibrate(50);
     }
 
     try {
@@ -293,7 +275,18 @@ export class RoomCard extends LitElement implements LovelaceCard {
 
   private _handleAction(ev: ActionHandlerEvent, device: ProcessedDevice): void {
     if (this.hass && device.available && ev.detail.action) {
-      const config = device[`${ev.detail.action}_action`];
+      let config;
+      switch (ev.detail.action) {
+        case 'tap':
+          config = device.tap_action;
+          break;
+        case 'hold':
+          config = device.hold_action;
+          break;
+        case 'double_tap':
+          config = device.double_tap_action;
+          break;
+      }
       if (config) {
         handleAction(this, this.hass, config, ev.detail.action);
       }
@@ -326,8 +319,6 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private _renderHeader(): TemplateResult {
-    const { temperature, humidity, temperature_unit } = this._roomData!;
-    
     return html`
       <div class="header">
         <h2 class="room-name">${this._config!.name}</h2>
@@ -682,5 +673,15 @@ export class RoomCard extends LitElement implements LovelaceCard {
       haptic_feedback: true,
       devices: []
     };
+  }
+}
+
+// Declare global types
+declare global {
+  interface Window {
+    customCards: Array<object>;
+  }
+  interface HTMLElementTagNameMap {
+    'room-card': RoomCard;
   }
 }
