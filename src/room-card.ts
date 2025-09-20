@@ -1,19 +1,74 @@
-import { LitElement, html, css, TemplateResult, PropertyValues, CSSResult } from 'lit';
+import {
+  LitElement,
+  html,
+  css,
+  TemplateResult,
+  PropertyValues,
+  CSSResult
+} from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, LovelaceCard, hasAction, ActionHandlerEvent, handleAction } from 'custom-card-helpers';
+import {
+  HomeAssistant,
+  LovelaceCard,
+  LovelaceCardConfig,
+  ActionHandlerEvent,
+  handleAction,
+  hasAction
+} from 'custom-card-helpers';
 
-// Import components to ensure they register themselves
-import './components/circular-slider';
-import './components/device-chip';
-import './components/temperature-display';
-import './room-card-editor';
+// Import version from package.json
+import { version } from '../package.json';
 
-// Import utilities and types
+// Import types
+import { 
+  RoomCardConfig, 
+  RoomData, 
+  ProcessedDevice, 
+  DeviceConfig,
+  TemperatureColors 
+} from './types';
+
+// Import config and validation
+import { 
+  DEFAULT_CONFIG, 
+  TEMPERATURE_RANGES,
+  TEMPERATURE_RANGES_CELSIUS,
+  validateConfig,
+  getDeviceDefaults,
+  mergeDeviceConfig 
+} from './config';
+
+// Import utilities
 import { actionHandler } from './utils/action-handler';
-import { RoomCardConfig, RoomData, ProcessedDevice, DeviceConfig } from './types';
-import { DEFAULT_CONFIG, TEMPERATURE_RANGES, validateConfig } from './config';
 import { HapticFeedback } from './utils/haptic-feedback';
 import { getTemperatureColor } from './utils/color-utils';
+
+// Declare global for window.customCards
+declare global {
+  interface Window {
+    customCards: Array<object>;
+  }
+  interface HTMLElementTagNameMap {
+    'room-card': RoomCard;
+    'room-card-editor': any;
+  }
+}
+
+// Register the card
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: 'room-card',
+  name: 'Room Card',
+  preview: true,
+  description: 'Room card with temperature, humidity and device controls',
+  documentationURL: 'https://github.com/yourusername/room-card'
+});
+
+console.info(
+  `%c  ROOM-CARD  %c  Version ${version}  `,
+  'color: white; font-weight: bold; background: #0288d1',
+  'color: #0288d1; font-weight: bold; background: #e1f5fe'
+);
 
 @customElement('room-card')
 export class RoomCard extends LitElement implements LovelaceCard {
@@ -21,19 +76,66 @@ export class RoomCard extends LitElement implements LovelaceCard {
   @state() private _config?: RoomCardConfig;
   @state() private _roomData?: RoomData;
 
+  // Action handling state
+  private _holdTimeoutId?: number;
+  private _holdTriggered = false;
+  
   public setConfig(config: RoomCardConfig): void {
-    validateConfig(config);
-    this._config = { ...DEFAULT_CONFIG, ...config };
-    this._updateRoomData();
+    try {
+      validateConfig(config);
+      this._config = { ...DEFAULT_CONFIG, ...config };
+      this.requestUpdate();
+    } catch (e) {
+      throw new Error(`Room Card Configuration Error: ${e}`);
+    }
   }
 
   public getCardSize(): number {
-    return 4;
+    return this._config?.devices ? Math.max(4, 3 + Math.ceil(this._config.devices.length / 3)) : 4;
+  }
+
+  protected shouldUpdate(changedProperties: PropertyValues): boolean {
+    if (!this._config) {
+      return false;
+    }
+    
+    if (changedProperties.has('_config')) {
+      return true;
+    }
+    
+    if (changedProperties.has('hass')) {
+      // Check if any relevant entities have changed
+      const oldHass = changedProperties.get('hass') as HomeAssistant | undefined;
+      if (!oldHass) return true;
+      
+      // Check temperature sensor
+      if (this._config.temperature_sensor &&
+          oldHass.states[this._config.temperature_sensor] !== this.hass.states[this._config.temperature_sensor]) {
+        return true;
+      }
+      
+      // Check humidity sensor
+      if (this._config.humidity_sensor &&
+          oldHass.states[this._config.humidity_sensor] !== this.hass.states[this._config.humidity_sensor]) {
+        return true;
+      }
+      
+      // Check devices
+      if (this._config.devices) {
+        for (const device of this._config.devices) {
+          if (oldHass.states[device.entity] !== this.hass.states[device.entity]) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
   }
 
   protected updated(changedProperties: PropertyValues): void {
     super.updated(changedProperties);
-    if (changedProperties.has('hass') && this._config) {
+    if ((changedProperties.has('hass') || changedProperties.has('_config')) && this._config) {
       this._updateRoomData();
     }
   }
@@ -41,20 +143,30 @@ export class RoomCard extends LitElement implements LovelaceCard {
   private _updateRoomData(): void {
     if (!this.hass || !this._config) return;
 
-    const temperature = this._config.temperature_sensor 
-      ? parseFloat(this.hass.states[this._config.temperature_sensor]?.state) 
+    const tempEntity = this._config.temperature_sensor 
+      ? this.hass.states[this._config.temperature_sensor]
       : undefined;
     
-    const humidity = this._config.humidity_sensor
-      ? parseFloat(this.hass.states[this._config.humidity_sensor]?.state)
+    const humidityEntity = this._config.humidity_sensor
+      ? this.hass.states[this._config.humidity_sensor]
+      : undefined;
+
+    const temperature = tempEntity?.state !== 'unavailable' 
+      ? parseFloat(tempEntity?.state || '0') 
+      : undefined;
+    
+    const humidity = humidityEntity?.state !== 'unavailable'
+      ? parseFloat(humidityEntity?.state || '0')
       : undefined;
 
     const devices: ProcessedDevice[] = this._config.devices?.map(device => {
       const entity = this.hass.states[device.entity];
+      const mergedConfig = mergeDeviceConfig(device, device.type);
+      
       return {
-        ...device,
-        current_value: this._getDeviceValue(entity, device),
-        is_on: entity?.state !== 'off' && entity?.state !== 'unavailable',
+        ...mergedConfig,
+        current_value: this._getDeviceValue(entity, mergedConfig),
+        is_on: entity?.state === 'on',
         available: entity?.state !== 'unavailable'
       };
     }) || [];
@@ -64,113 +176,180 @@ export class RoomCard extends LitElement implements LovelaceCard {
       humidity,
       temperature_unit: this._config.temperature_unit || 'F',
       devices,
-      background_color: getTemperatureColor(temperature, this._config.background_colors)
+      background_color: getTemperatureColor(
+        temperature, 
+        this._config.background_colors,
+        this._config.temperature_unit
+      )
     };
   }
 
   private _getDeviceValue(entity: any, device: DeviceConfig): number | string {
-    if (!entity) return 0;
+    if (!entity || entity.state === 'unavailable') return device.min_value || 0;
     
     switch (device.type) {
       case 'light':
         return entity.attributes?.brightness || 0;
+        
       case 'speaker':
-        return entity.attributes?.volume_level ? Math.round(entity.attributes.volume_level * 100) : 0;
+        const volume = entity.attributes?.volume_level;
+        return volume !== undefined ? Math.round(volume * 100) : 0;
+        
       case 'purifier':
-        return entity.attributes?.preset_mode || entity.state;
+      case 'fan':
+        const presetMode = entity.attributes?.preset_mode || entity.attributes?.speed;
+        if (device.modes && presetMode) {
+          const index = device.modes.indexOf(presetMode);
+          return index >= 0 ? index / (device.modes.length - 1) : 0;
+        }
+        return entity.state === 'on' ? 1 : 0;
+        
       default:
-        return 0;
+        if (entity.attributes?.percentage !== undefined) {
+          return entity.attributes.percentage;
+        }
+        return entity.state === 'on' ? 1 : 0;
     }
   }
 
-  private _handleDeviceControl(device: ProcessedDevice, value: number | string): void {
+  private async _handleDeviceControl(device: ProcessedDevice, value: number | string): Promise<void> {
+    if (!this.hass || !device.available) return;
+
+    const entity = this.hass.states[device.entity];
+    if (!entity) return;
+
+    // Haptic feedback
     if (this._config?.haptic_feedback) {
-      HapticFeedback.light();
+      HapticFeedback.vibrate('selection');
     }
 
-    const serviceData: any = { entity_id: device.entity };
-
-    switch (device.type) {
-      case 'light':
-        if (typeof value === 'number') {
-          this.hass.callService('light', value > 0 ? 'turn_on' : 'turn_off', {
-            ...serviceData,
-            ...(value > 0 && { brightness: value })
+    try {
+      switch (device.type) {
+        case 'light':
+          await this.hass.callService('light', 'turn_on', {
+            entity_id: device.entity,
+            brightness: Math.round(Number(value))
           });
-        }
-        break;
-      case 'speaker':
-        if (typeof value === 'number') {
-          this.hass.callService('media_player', 'volume_set', {
-            ...serviceData,
-            volume_level: value / 100
+          break;
+          
+        case 'speaker':
+          await this.hass.callService('media_player', 'volume_set', {
+            entity_id: device.entity,
+            volume_level: Number(value) / 100
           });
-        }
-        break;
-      case 'purifier':
-        this.hass.callService('fan', 'set_preset_mode', {
-          ...serviceData,
-          preset_mode: value
-        });
-        break;
+          break;
+          
+        case 'purifier':
+        case 'fan':
+          if (device.modes && device.control_type === 'discrete') {
+            const modeIndex = Math.round(Number(value) * (device.modes.length - 1));
+            const mode = device.modes[modeIndex];
+            
+            if (modeIndex === 0 || mode === 'Off') {
+              await this.hass.callService('fan', 'turn_off', {
+                entity_id: device.entity
+              });
+            } else {
+              await this.hass.callService('fan', 'set_preset_mode', {
+                entity_id: device.entity,
+                preset_mode: mode
+              });
+            }
+          } else {
+            await this.hass.callService('fan', 'set_percentage', {
+              entity_id: device.entity,
+              percentage: Math.round(Number(value))
+            });
+          }
+          break;
+          
+        default:
+          // Generic switch/toggle
+          await this.hass.callService('homeassistant', Number(value) > 50 ? 'turn_on' : 'turn_off', {
+            entity_id: device.entity
+          });
+      }
+    } catch (e) {
+      console.error('Error controlling device:', e);
     }
   }
 
-  private _handleDeviceToggle(device: ProcessedDevice): void {
+  private async _handleDeviceToggle(device: ProcessedDevice): Promise<void> {
+    if (!this.hass || !device.available) return;
+
+    // Haptic feedback
     if (this._config?.haptic_feedback) {
-      HapticFeedback.medium();
+      HapticFeedback.vibrate('light');
     }
 
-    const domain = device.entity.split('.')[0];
-    const service = device.is_on ? 'turn_off' : 'turn_on';
-    
-    this.hass.callService(domain, service, {
-      entity_id: device.entity
-    });
+    try {
+      await this.hass.callService('homeassistant', 'toggle', {
+        entity_id: device.entity
+      });
+    } catch (e) {
+      console.error('Error toggling device:', e);
+    }
   }
 
   private _handleAction(ev: ActionHandlerEvent, device: ProcessedDevice): void {
-    if (this.hass && this._config && device.tap_action) {
-      handleAction(this, this.hass, device.tap_action, 'tap');
+    if (this.hass && device.available && ev.detail.action) {
+      const config = device[`${ev.detail.action}_action`];
+      if (config) {
+        handleAction(this, this.hass, config, ev.detail.action);
+      }
     }
   }
 
-  protected render(): TemplateResult {
-    if (!this._config || !this._roomData) {
+  protected render(): TemplateResult | void {
+    if (!this._config || !this.hass) {
       return html``;
     }
 
+    if (!this._roomData) {
+      return html`
+        <ha-card>
+          <div class="card-content">
+            <div class="warning">Loading...</div>
+          </div>
+        </ha-card>
+      `;
+    }
+
     return html`
-      <ha-card style="background-color: ${this._roomData.background_color}">
+      <ha-card style="background: ${this._roomData.background_color}">
         <div class="card-content">
-          <div class="header">
-            <h2 class="room-name">${this._config.name}</h2>
-            ${this._renderSensors()}
-          </div>
-          
-          <div class="devices-container">
-            ${this._roomData.devices.map(device => this._renderDevice(device))}
-          </div>
+          ${this._renderHeader()}
+          ${this._roomData.devices.length > 0 ? this._renderDevices() : ''}
         </div>
       </ha-card>
     `;
   }
 
-  private _renderSensors(): TemplateResult {
-    if (!this._roomData) return html``;
+  private _renderHeader(): TemplateResult {
+    const { temperature, humidity, temperature_unit } = this._roomData!;
     
-    const { temperature, humidity, temperature_unit } = this._roomData;
+    return html`
+      <div class="header">
+        <h2 class="room-name">${this._config!.name}</h2>
+        ${this._renderSensors()}
+      </div>
+    `;
+  }
+
+  private _renderSensors(): TemplateResult {
+    const { temperature, humidity, temperature_unit } = this._roomData!;
     
     return html`
       <div class="sensors">
-        ${this._config?.show_temperature && temperature !== undefined ? html`
+        ${this._config!.show_temperature !== false && temperature !== undefined ? html`
           <div class="sensor temperature">
             <ha-icon icon="mdi:thermometer"></ha-icon>
             <span>${temperature.toFixed(1)}°${temperature_unit}</span>
           </div>
         ` : ''}
-        ${this._config?.show_humidity && humidity !== undefined ? html`
-          <div class="sensor humidity">  
+        
+        ${this._config!.show_humidity !== false && humidity !== undefined ? html`
+          <div class="sensor humidity">
             <ha-icon icon="mdi:water-percent"></ha-icon>
             <span>${humidity.toFixed(0)}%</span>
           </div>
@@ -179,25 +358,95 @@ export class RoomCard extends LitElement implements LovelaceCard {
     `;
   }
 
-  private _renderDevice(device: ProcessedDevice): TemplateResult {
+  private _renderDevices(): TemplateResult {
     return html`
-      <div class="device ${device.is_on ? 'on' : 'off'} ${!device.available ? 'unavailable' : ''}">
-        <circular-slider
-          .device=${device}
-          .value=${device.current_value}
-          @value-changed=${(e: CustomEvent) => this._handleDeviceControl(device, e.detail.value)}
-        ></circular-slider>
-        
-        <device-chip
-          .device=${device}
-          @device-toggle=${() => this._handleDeviceToggle(device)}
-        ></device-chip>
+      <div class="devices-container">
+        ${this._roomData!.devices.map(device => this._renderDevice(device))}
       </div>
     `;
   }
 
+  private _renderDevice(device: ProcessedDevice): TemplateResult {
+    const icon = device.icon || this._getDefaultIcon(device.type);
+    const name = device.name || this._getEntityName(device.entity);
+    
+    return html`
+      <div 
+        class="device ${device.is_on ? 'on' : 'off'} ${!device.available ? 'unavailable' : ''}"
+        @action=${(ev: ActionHandlerEvent) => this._handleAction(ev, device)}
+        .actionHandler=${actionHandler({
+          hasHold: hasAction(device.hold_action),
+          hasDoubleClick: hasAction(device.double_tap_action)
+        })}
+      >
+        <div class="device-icon">
+          <ha-icon icon="${icon}"></ha-icon>
+        </div>
+        
+        <div class="device-name">${name}</div>
+        
+        ${device.control_type === 'continuous' ? html`
+          <div class="device-slider">
+            <input
+              type="range"
+              min="${device.min_value || 0}"
+              max="${device.max_value || 100}"
+              step="${device.step || 1}"
+              .value="${device.current_value}"
+              ?disabled="${!device.available}"
+              @change=${(e: Event) => this._handleDeviceControl(device, (e.target as HTMLInputElement).value)}
+            />
+          </div>
+        ` : html`
+          <div class="device-modes">
+            ${device.modes?.map((mode, index) => html`
+              <button
+                class="mode-button ${device.current_value === index / (device.modes!.length - 1) ? 'active' : ''}"
+                ?disabled="${!device.available}"
+                @click=${() => this._handleDeviceControl(device, index / (device.modes!.length - 1))}
+              >
+                ${mode}
+              </button>
+            `)}
+          </div>
+        `}
+        
+        <button
+          class="device-toggle"
+          ?disabled="${!device.available}"
+          @click=${() => this._handleDeviceToggle(device)}
+        >
+          <ha-icon icon="${device.is_on ? 'mdi:power' : 'mdi:power-off'}"></ha-icon>
+        </button>
+      </div>
+    `;
+  }
+
+  private _getDefaultIcon(type: string): string {
+    const icons: Record<string, string> = {
+      light: 'mdi:lightbulb',
+      speaker: 'mdi:speaker',
+      purifier: 'mdi:air-purifier',
+      fan: 'mdi:fan',
+      climate: 'mdi:thermostat',
+      switch: 'mdi:toggle-switch',
+      cover: 'mdi:window-shutter',
+      vacuum: 'mdi:robot-vacuum'
+    };
+    return icons[type] || 'mdi:device-unknown';
+  }
+
+  private _getEntityName(entityId: string): string {
+    const entity = this.hass.states[entityId];
+    return entity?.attributes?.friendly_name || entityId.split('.')[1] || 'Unknown';
+  }
+
   static get styles(): CSSResult {
     return css`
+      :host {
+        display: block;
+      }
+
       ha-card {
         border-radius: 16px;
         transition: background-color 0.3s ease;
@@ -206,6 +455,12 @@ export class RoomCard extends LitElement implements LovelaceCard {
       
       .card-content {
         padding: 16px;
+      }
+      
+      .warning {
+        text-align: center;
+        padding: 16px;
+        color: var(--warning-color);
       }
       
       .header {
@@ -241,7 +496,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
       
       .devices-container {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
         gap: 16px;
       }
       
@@ -249,20 +504,164 @@ export class RoomCard extends LitElement implements LovelaceCard {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 12px;
-        padding: 12px;
+        gap: 8px;
+        padding: 16px;
         border-radius: 12px;
-        background: rgba(255, 255, 255, 0.1);
+        background: var(--card-background-color);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         transition: all 0.2s ease;
+        cursor: pointer;
+        position: relative;
       }
       
       .device.unavailable {
         opacity: 0.5;
-        pointer-events: none;
+        cursor: not-allowed;
       }
       
-      .device:hover {
-        background: rgba(255, 255, 255, 0.15);
+      .device:not(.unavailable):hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+      }
+      
+      .device-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--primary-color);
+        color: var(--text-primary-color);
+        transition: all 0.2s ease;
+      }
+      
+      .device.off .device-icon {
+        background: var(--disabled-color, #9e9e9e);
+      }
+      
+      .device-icon ha-icon {
+        --mdc-icon-size: 24px;
+      }
+      
+      .device-name {
+        font-size: 0.9em;
+        font-weight: 500;
+        text-align: center;
+        color: var(--primary-text-color);
+      }
+      
+      .device-slider {
+        width: 100%;
+        padding: 8px 0;
+      }
+      
+      .device-slider input[type="range"] {
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--divider-color);
+        outline: none;
+        -webkit-appearance: none;
+      }
+      
+      .device-slider input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        cursor: pointer;
+      }
+      
+      .device-slider input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        cursor: pointer;
+        border: none;
+      }
+      
+      .device-slider input[type="range"]:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      .device-modes {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: 100%;
+      }
+      
+      .mode-button {
+        padding: 6px 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--primary-text-color);
+        font-size: 0.8em;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+      
+      .mode-button:hover:not(:disabled) {
+        background: var(--primary-color);
+        color: var(--text-primary-color);
+        border-color: var(--primary-color);
+      }
+      
+      .mode-button.active {
+        background: var(--primary-color);
+        color: var(--text-primary-color);
+        border-color: var(--primary-color);
+      }
+      
+      .mode-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      .device-toggle {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: var(--secondary-text-color);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+      }
+      
+      .device-toggle:hover:not(:disabled) {
+        background: var(--divider-color);
+      }
+      
+      .device-toggle ha-icon {
+        --mdc-icon-size: 20px;
+      }
+      
+      .device-toggle:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      @media (max-width: 600px) {
+        .devices-container {
+          grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        }
+        
+        .device {
+          padding: 12px 8px;
+        }
       }
     `;
   }
@@ -283,23 +682,5 @@ export class RoomCard extends LitElement implements LovelaceCard {
       haptic_feedback: true,
       devices: []
     };
-  }
-}
-
-// Register the card
-(window as any).customCards = (window as any).customCards || [];
-(window as any).customCards.push({
-  type: 'room-card',
-  name: 'Room Card',
-  preview: false,
-  description: 'Room card with temperature, humidity and device controls',
-  documentationURL: 'https://github.com/yourusername/room-card'
-});
-
-// Declare global types for TypeScript
-declare global {
-  interface HTMLElementTagNameMap {
-    'room-card': RoomCard;
-    'room-card-editor': typeof import('./room-card-editor').RoomCardEditor;
   }
 }
