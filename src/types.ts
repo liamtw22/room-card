@@ -17,7 +17,7 @@ export interface DeviceConfig {
   entity: string;
   name?: string;
   icon?: string;
-  type: 'light' | 'speaker' | 'purifier';
+  type: 'light' | 'speaker' | 'purifier' | 'fan' | 'climate' | 'switch' | 'cover' | 'vacuum';
   control_type?: 'continuous' | 'discrete';
   min_value?: number;
   max_value?: number;
@@ -25,6 +25,7 @@ export interface DeviceConfig {
   modes?: string[];
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
 }
 
 export interface TemperatureColors {
