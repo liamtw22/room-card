@@ -66,36 +66,15 @@ export const FAN_PRESETS: DevicePreset[] = [
   { value: 1, label: 'Max', percentage: 100 }
 ];
 
-export const SLIDER_CONFIG = {
-  startAngle: -110,  // degrees (9 o'clock is -90, so -110 is slightly before)
-  endAngle: 30,      // degrees (3 o'clock is 0, so 30 is slightly after)
-  strokeWidth: 10,
-  thumbRadius: 16,
-  thumbRadiusDragging: 20,
-  hitAreaRadius: 25
-};
-
-export const ANIMATION_CONFIG = {
-  sliderTransition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-  discreteTransition: 'd 0.3s ease',
-  continuousTransition: 'stroke 0.2s ease',
-  cardTransition: 'background-color 0.3s ease',
-  rippleDuration: 600,
-  holdTime: 500,
-  doubleTapTime: 250
-};
-
-export const HAPTIC_PATTERNS = {
-  light: 50,
-  medium: 100,
-  heavy: 200,
-  selection: 10,
-  warning: [50, 100, 50],
-  success: [50, 50],
-  error: [100, 50, 100, 50, 100]
-};
-
 export function validateConfig(config: RoomCardConfig): void {
+  if (!config) {
+    throw new Error('No configuration provided');
+  }
+
+  if (!config.type || config.type !== 'custom:room-card') {
+    throw new Error('Invalid card type. Must be "custom:room-card"');
+  }
+
   if (!config.name) {
     throw new Error('Room name is required');
   }
@@ -121,8 +100,8 @@ function validateDeviceConfig(device: DeviceConfig, index: number): void {
   }
   
   const validTypes = ['light', 'speaker', 'purifier', 'fan', 'climate', 'switch', 'cover', 'vacuum'];
-  if (!validTypes.includes(device.type)) {
-    throw new Error(`Device at index ${index} has invalid type: ${device.type}`);
+  if (!device.type || !validTypes.includes(device.type)) {
+    throw new Error(`Device at index ${index} has invalid type: ${device.type || 'undefined'}`);
   }
   
   if (device.control_type && !['continuous', 'discrete'].includes(device.control_type)) {
@@ -141,15 +120,20 @@ function validateDeviceConfig(device: DeviceConfig, index: number): void {
 }
 
 function validateTemperatureColors(colors: TemperatureColors): void {
-  const requiredKeys = ['cold', 'cool', 'comfortable', 'warm', 'hot'];
+  const requiredKeys: (keyof TemperatureColors)[] = ['cold', 'cool', 'comfortable', 'warm', 'hot'];
   const hexColorRegex = /^#[0-9A-Fa-f]{6}$/;
   const rgbColorRegex = /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/;
   const rgbaColorRegex = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*\)$/;
   
   for (const key of requiredKeys) {
-    const color = colors[key as keyof TemperatureColors];
+    const color = colors[key];
     if (!color) {
       throw new Error(`Temperature color for '${key}' is required`);
+    }
+    
+    // Allow CSS variables
+    if (color.startsWith('var(')) {
+      continue;
     }
     
     if (!hexColorRegex.test(color) && 
@@ -203,9 +187,32 @@ export function getDeviceDefaults(type: string): Partial<DeviceConfig> {
         step: 1
       };
       
-    default:
+    case 'switch':
       return {
         icon: DEVICE_ICONS.switch,
+        control_type: 'discrete',
+        modes: ['Off', 'On']
+      };
+      
+    case 'cover':
+      return {
+        icon: DEVICE_ICONS.cover,
+        control_type: 'continuous',
+        min_value: 0,
+        max_value: 100,
+        step: 1
+      };
+      
+    case 'vacuum':
+      return {
+        icon: DEVICE_ICONS.vacuum,
+        control_type: 'discrete',
+        modes: ['Off', 'Clean', 'Return']
+      };
+      
+    default:
+      return {
+        icon: 'mdi:device-unknown',
         control_type: 'continuous',
         min_value: 0,
         max_value: 100,
@@ -219,5 +226,12 @@ export function mergeDeviceConfig(
   type: string
 ): DeviceConfig {
   const defaults = getDeviceDefaults(type);
-  return { ...defaults, ...userConfig, type } as DeviceConfig;
+  const merged = { ...defaults, ...userConfig, type } as DeviceConfig;
+  
+  // Ensure required fields
+  if (!merged.entity) {
+    throw new Error('Device entity is required');
+  }
+  
+  return merged;
 }
