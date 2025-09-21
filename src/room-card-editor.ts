@@ -55,9 +55,20 @@ export interface TemperatureColors {
 const COMMON_MDI_ICONS = [
   'mdi:home', 'mdi:sofa', 'mdi:bed', 'mdi:silverware-fork-knife', 
   'mdi:toilet', 'mdi:shower', 'mdi:desk', 'mdi:garage',
-  'mdi:lightbulb', 'mdi:speaker', 'mdi:air-purifier', 'mdi:fan',
-  'mdi:thermometer', 'mdi:water-percent', 'mdi:television',
-  'mdi:alpha-l-box', 'mdi:door', 'mdi:window-open', 'mdi:flower'
+  'mdi:lightbulb', 'mdi:lightbulb-outline', 'mdi:speaker', 'mdi:air-purifier', 
+  'mdi:fan', 'mdi:ceiling-fan', 'mdi:thermometer', 'mdi:water-percent', 
+  'mdi:television', 'mdi:alpha-l-box', 'mdi:door', 'mdi:window-open', 
+  'mdi:flower', 'mdi:power', 'mdi:power-off', 'mdi:toggle-switch',
+  'mdi:kitchen', 'mdi:bedroom', 'mdi:bathroom', 'mdi:living-room',
+  'mdi:stairs', 'mdi:balcony', 'mdi:pool', 'mdi:tree',
+  'mdi:car', 'mdi:washing-machine', 'mdi:dishwasher', 'mdi:microwave',
+  'mdi:coffee-maker', 'mdi:kettle', 'mdi:fridge', 'mdi:stove',
+  'mdi:lamp', 'mdi:floor-lamp', 'mdi:wall-sconce', 'mdi:chandelier',
+  'mdi:blinds', 'mdi:curtains', 'mdi:roller-shade', 'mdi:window-shutter',
+  'mdi:music', 'mdi:music-note', 'mdi:volume-high', 'mdi:volume-medium',
+  'mdi:play', 'mdi:pause', 'mdi:stop', 'mdi:skip-next',
+  'mdi:air-conditioner', 'mdi:radiator', 'mdi:fireplace', 'mdi:weather-sunny',
+  'mdi:robot-vacuum', 'mdi:vacuum', 'mdi:broom', 'mdi:spray-bottle'
 ];
 
 // Common entity attributes
@@ -76,6 +87,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   @state() private _config?: RoomCardConfig;
   @state() private _iconSearch = '';
   @state() private _deviceIconSearch: Record<number, string> = {};
+  @state() private _iconFocused = false;
+  @state() private _deviceIconFocused: Record<number, boolean> = {};
 
   public setConfig(config: RoomCardConfig): void {
     this._config = { ...config };
@@ -243,7 +256,9 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           .hass=${this.hass}
           .value=${this._config!.background_entity || ''}
           .configPath=${'background_entity'}
-          @value-changed=${this._valueChanged}
+          @value-changed=${(e: any) => {
+            this._valueChanged({ target: { configPath: 'background_entity', value: e.detail.value }});
+          }}
           allow-custom-entity
           label="Background Entity"
         ></ha-entity-picker>
@@ -281,15 +296,26 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             this._iconSearch = e.target.value;
             this._valueChanged(e);
           }}
+          @focus=${() => {
+            this._iconFocused = true;
+            this._iconSearch = this._config!.icon || '';
+          }}
+          @blur=${() => {
+            setTimeout(() => {
+              this._iconFocused = false;
+              this._iconSearch = '';
+            }, 200);
+          }}
           helper="MDI icon name (e.g., mdi:home)"
         ></ha-textfield>
         
-        ${this._iconSearch && filteredIcons.length > 0 ? html`
+        ${this._iconFocused && filteredIcons.length > 0 ? html`
           <div class="icon-suggestions">
-            ${filteredIcons.slice(0, 5).map(icon => html`
+            ${filteredIcons.slice(0, 8).map(icon => html`
               <div class="icon-suggestion" @click=${() => {
                 this._config = { ...this._config!, icon };
                 this._iconSearch = '';
+                this._iconFocused = false;
                 fireEvent(this, 'config-changed', { config: this._config });
               }}>
                 <ha-icon icon="${icon}"></ha-icon>
@@ -335,7 +361,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             this._config = { 
               ...this._config!, 
               icon_color: { 
-                ...(this._config!.icon_color as any),
+                ...(typeof this._config!.icon_color === 'object' ? this._config!.icon_color : {}),
                 entity: e.detail.value 
               }
             };
@@ -381,7 +407,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             this._config = { 
               ...this._config!, 
               icon_background_color: { 
-                ...(this._config!.icon_background_color as any),
+                ...(typeof this._config!.icon_background_color === 'object' ? this._config!.icon_background_color : {}),
                 entity: e.detail.value 
               }
             };
@@ -519,7 +545,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         </div>
 
         ${this._config.devices?.map((device, index) => {
-          const filteredDeviceIcons = this._getFilteredIcons(this._deviceIconSearch[index] || '');
+          const filteredDeviceIcons = this._getFilteredIcons(this._deviceIconSearch[index] || device.icon || '');
           const entityAttrs = this._getEntityAttributes(device.entity);
           
           return html`
@@ -536,16 +562,20 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
               .hass=${this.hass}
               .value=${device.entity}
               .field=${'entity'}
-              @value-changed=${(e: any) => this._deviceValueChanged(e, index)}
+              @value-changed=${(e: any) => {
+                this._deviceValueChanged({ target: { field: 'entity', value: e.detail.value }}, index);
+              }}
               allow-custom-entity
               label="Display Entity"
             ></ha-entity-picker>
 
             <ha-entity-picker
               .hass=${this.hass}
-              .value=${device.control_entity || device.entity}
+              .value=${device.control_entity || ''}
               .field=${'control_entity'}
-              @value-changed=${(e: any) => this._deviceValueChanged(e, index)}
+              @value-changed=${(e: any) => {
+                this._deviceValueChanged({ target: { field: 'control_entity', value: e.detail.value }}, index);
+              }}
               allow-custom-entity
               label="Control Entity (Optional)"
               helper="Leave empty to use display entity"
@@ -560,9 +590,13 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
               @selected=${(e: any) => this._deviceValueChanged(e, index)}
               @closed=${(e: Event) => e.stopPropagation()}
             >
-              ${entityAttrs.map(attr => html`
+              ${entityAttrs.length > 0 ? entityAttrs.map(attr => html`
                 <ha-list-item value=${attr}>${attr}</ha-list-item>
-              `)}
+              `) : html`
+                <ha-list-item value="brightness">brightness</ha-list-item>
+                <ha-list-item value="volume_level">volume_level</ha-list-item>
+                <ha-list-item value="percentage">percentage</ha-list-item>
+              `}
             </ha-select>
 
             <div class="icon-picker">
@@ -574,17 +608,29 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                   this._deviceIconSearch = { ...this._deviceIconSearch, [index]: e.target.value };
                   this._deviceValueChanged(e, index);
                 }}
+                @focus=${() => {
+                  this._deviceIconFocused = { ...this._deviceIconFocused, [index]: true };
+                  if (!this._deviceIconSearch[index]) {
+                    this._deviceIconSearch = { ...this._deviceIconSearch, [index]: device.icon || '' };
+                  }
+                }}
+                @blur=${() => {
+                  setTimeout(() => {
+                    this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
+                  }, 200);
+                }}
                 helper="MDI icon name"
               ></ha-textfield>
               
-              ${this._deviceIconSearch[index] && filteredDeviceIcons.length > 0 ? html`
+              ${this._deviceIconFocused[index] ? html`
                 <div class="icon-suggestions">
-                  ${filteredDeviceIcons.slice(0, 5).map(icon => html`
+                  ${this._getFilteredIcons(this._deviceIconSearch[index] || device.icon || '').slice(0, 8).map(icon => html`
                     <div class="icon-suggestion" @click=${() => {
                       const devices = [...this._config!.devices!];
                       devices[index] = { ...devices[index], icon };
                       this._config = { ...this._config!, devices };
                       this._deviceIconSearch = { ...this._deviceIconSearch, [index]: '' };
+                      this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
                       fireEvent(this, 'config-changed', { config: this._config });
                     }}>
                       <ha-icon icon="${icon}"></ha-icon>
@@ -607,7 +653,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
               @closed=${(e: Event) => e.stopPropagation()}
             >
               <ha-list-item value="custom">Custom Color</ha-list-item>
-              ${device.entity.startsWith('light.') ? html`
+              ${device.entity && device.entity.startsWith('light.') ? html`
                 <ha-list-item value="light-color">Use Light Color</ha-list-item>
               ` : ''}
             </ha-select>
@@ -615,7 +661,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             ${device.color !== 'light-color' ? html`
               <ha-textfield
                 label="Custom Color"
-                .value=${device.color || '#FDD835'}
+                .value=${typeof device.color === 'string' ? device.color : '#FDD835'}
                 .field=${'color'}
                 @input=${(e: any) => this._deviceValueChanged(e, index)}
                 helper="Hex color code (e.g., #FDD835)"
