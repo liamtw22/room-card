@@ -208,29 +208,6 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     fireEvent(this, 'config-changed', { config: this._config });
   }
 
-  private _deviceValueChanged(ev: any, index: number): void {
-    if (!this._config?.devices) return;
-    
-    const field = ev.target?.field || ev.currentTarget?.field;
-    let value;
-    
-    if (ev.detail?.value !== undefined) {
-      value = ev.detail.value;
-    } else if (ev.target?.checked !== undefined) {
-      value = ev.target.checked;
-    } else if (ev.target?.value !== undefined) {
-      value = ev.target.value;
-    }
-    
-    if (field && value !== undefined) {
-      const devices = [...this._config.devices];
-      devices[index] = { ...devices[index], [field]: value };
-      
-      this._config = { ...this._config, devices };
-      fireEvent(this, 'config-changed', { config: this._config });
-    }
-  }
-
   private _getAreas(): string[] {
     if (!this.hass) return [];
     
@@ -610,8 +587,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                   <ha-entity-picker
                     .hass=${this.hass}
                     .value=${device.entity || ''}
-                    .field=${'entity'}
-                    @value-changed=${(e: any) => this._deviceValueChanged(e, index)}
+                    @value-changed=${(e: any) => {
+                      const devices = [...this._config!.devices!];
+                      devices[index] = { ...devices[index], entity: e.detail.value };
+                      this._config = { ...this._config!, devices };
+                      fireEvent(this, 'config-changed', { config: this._config });
+                    }}
                     allow-custom-entity
                     label="Display Entity"
                   ></ha-entity-picker>
@@ -619,8 +600,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                   <ha-entity-picker
                     .hass=${this.hass}
                     .value=${device.control_entity || ''}
-                    .field=${'control_entity'}
-                    @value-changed=${(e: any) => this._deviceValueChanged(e, index)}
+                    @value-changed=${(e: any) => {
+                      const devices = [...this._config!.devices!];
+                      devices[index] = { ...devices[index], control_entity: e.detail.value };
+                      this._config = { ...this._config!, devices };
+                      fireEvent(this, 'config-changed', { config: this._config });
+                    }}
                     allow-custom-entity
                     label="Control Entity (Optional)"
                     helper="Leave empty to use display entity"
@@ -631,8 +616,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     fixedMenuPosition
                     label="Attribute"
                     .value=${device.attribute || 'brightness'}
-                    .field=${'attribute'}
-                    @selected=${(e: any) => this._deviceValueChanged(e, index)}
+                    @selected=${(e: any) => {
+                      const devices = [...this._config!.devices!];
+                      devices[index] = { ...devices[index], attribute: e.detail.value };
+                      this._config = { ...this._config!, devices };
+                      fireEvent(this, 'config-changed', { config: this._config });
+                    }}
                     @closed=${(e: Event) => e.stopPropagation()}
                   >
                     ${entityAttrs.length > 0 ? entityAttrs.map(attr => html`
@@ -648,10 +637,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     <ha-textfield
                       label="Icon"
                       .value=${device.icon || ''}
-                      .field=${'icon'}
                       @input=${(e: any) => {
+                        const devices = [...this._config!.devices!];
+                        devices[index] = { ...devices[index], icon: e.target.value };
+                        this._config = { ...this._config!, devices };
                         this._deviceIconSearch = { ...this._deviceIconSearch, [index]: e.target.value };
-                        this._deviceValueChanged(e, index);
+                        fireEvent(this, 'config-changed', { config: this._config });
                       }}
                       @focus=${() => {
                         this._deviceIconFocused = { ...this._deviceIconFocused, [index]: true };
@@ -693,7 +684,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     .value=${device.color === 'light-color' ? 'light-color' : 'custom'}
                     @selected=${(e: any) => {
                       const value = e.target.value === 'light-color' ? 'light-color' : '#FDD835';
-                      this._deviceValueChanged({ target: { field: 'color', value }}, index);
+                      const devices = [...this._config!.devices!];
+                      devices[index] = { ...devices[index], color: value };
+                      this._config = { ...this._config!, devices };
+                      fireEvent(this, 'config-changed', { config: this._config });
                     }}
                     @closed=${(e: Event) => e.stopPropagation()}
                   >
@@ -707,8 +701,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     <ha-textfield
                       label="Custom Color"
                       .value=${typeof device.color === 'string' ? device.color : '#FDD835'}
-                      .field=${'color'}
-                      @input=${(e: any) => this._deviceValueChanged(e, index)}
+                      @input=${(e: any) => {
+                        const devices = [...this._config!.devices!];
+                        devices[index] = { ...devices[index], color: e.target.value };
+                        this._config = { ...this._config!, devices };
+                        fireEvent(this, 'config-changed', { config: this._config });
+                      }}
                       helper="Hex color code (e.g., #FDD835)"
                     ></ha-textfield>
                   ` : ''}
@@ -717,8 +715,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     label="Scale"
                     type="number"
                     .value=${device.scale || 100}
-                    .field=${'scale'}
-                    @input=${(e: any) => this._deviceValueChanged(e, index)}
+                    @input=${(e: any) => {
+                      const devices = [...this._config!.devices!];
+                      devices[index] = { ...devices[index], scale: parseInt(e.target.value) || 100 };
+                      this._config = { ...this._config!, devices };
+                      fireEvent(this, 'config-changed', { config: this._config });
+                    }}
                     helper="Maximum value (255 for brightness, 1 for volume, 100 for percentage)"
                   ></ha-textfield>
 
@@ -727,8 +729,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     fixedMenuPosition
                     label="Control Type"
                     .value=${device.type || 'continuous'}
-                    .field=${'type'}
-                    @selected=${(e: any) => this._deviceValueChanged(e, index)}
+                    @selected=${(e: any) => {
+                      const devices = [...this._config!.devices!];
+                      devices[index] = { ...devices[index], type: e.detail.value };
+                      this._config = { ...this._config!, devices };
+                      fireEvent(this, 'config-changed', { config: this._config });
+                    }}
                     @closed=${(e: Event) => e.stopPropagation()}
                   >
                     <ha-list-item value="continuous">Continuous (Slider)</ha-list-item>
@@ -740,9 +746,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                       <ha-switch
                         .checked=${device.show_slider !== false}
                         @change=${(e: any) => {
-                          this._deviceValueChanged({ 
-                            target: { field: 'show_slider', checked: e.target.checked }
-                          }, index);
+                          const devices = [...this._config!.devices!];
+                          devices[index] = { ...devices[index], show_slider: e.target.checked };
+                          this._config = { ...this._config!, devices };
+                          fireEvent(this, 'config-changed', { config: this._config });
                         }}
                       ></ha-switch>
                     </ha-formfield>
@@ -751,9 +758,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                       <ha-switch
                         .checked=${device.show_chip !== false}
                         @change=${(e: any) => {
-                          this._deviceValueChanged({ 
-                            target: { field: 'show_chip', checked: e.target.checked }
-                          }, index);
+                          const devices = [...this._config!.devices!];
+                          devices[index] = { ...devices[index], show_chip: e.target.checked };
+                          this._config = { ...this._config!, devices };
+                          fireEvent(this, 'config-changed', { config: this._config });
                         }}
                       ></ha-switch>
                     </ha-formfield>
@@ -768,7 +776,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                         @input=${(e: any) => {
                           try {
                             const modes = JSON.parse(e.target.value);
-                            this._deviceValueChanged({ target: { field: 'modes', value: modes }}, index);
+                            const devices = [...this._config!.devices!];
+                            devices[index] = { ...devices[index], modes };
+                            this._config = { ...this._config!, devices };
+                            fireEvent(this, 'config-changed', { config: this._config });
                           } catch (err) {
                             // Invalid JSON, ignore
                           }
