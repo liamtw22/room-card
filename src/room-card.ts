@@ -207,7 +207,21 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private getBackgroundColor(): string {
-    if (!this.hass || !this._config?.temperature_sensor) return "#353535";
+    if (!this.hass || !this._config) return "#353535";
+
+    // Handle different background types
+    if (this._config.background_type === 'solid') {
+      return this._config.background_color || '#353535';
+    } else if (this._config.background_type === 'entity' && this._config.background_entity) {
+      const entity = this.hass.states[this._config.background_entity];
+      if (entity && this._config.background_state_colors) {
+        return this._config.background_state_colors[entity.state] || '#353535';
+      }
+      return '#353535';
+    }
+    
+    // Default to temperature-based background
+    if (!this._config.temperature_sensor) return "#353535";
     
     const tempEntity = this.hass.states[this._config.temperature_sensor];
     if (!tempEntity) return "#353535";
@@ -226,21 +240,71 @@ export class RoomCard extends LitElement implements LovelaceCard {
     else return "#df7b74";
   }
 
+  private getIconColor(): string {
+    if (!this.hass || !this._config) return "white";
+    
+    const iconColor = this._config.icon_color;
+    if (!iconColor) return "white";
+    
+    if (typeof iconColor === 'string') {
+      return iconColor;
+    } else if (iconColor.entity) {
+      const entity = this.hass.states[iconColor.entity];
+      if (entity) {
+        if (entity.state === 'on') return 'white';
+        if (entity.state === 'off') return '#7A7A7F';
+        if (iconColor.attribute && entity.attributes[iconColor.attribute]) {
+          return entity.attributes[iconColor.attribute];
+        }
+      }
+    }
+    return "white";
+  }
+
+  private getIconBackgroundColor(): string {
+    if (!this.hass || !this._config) return "rgba(255, 255, 255, 0.2)";
+    
+    const iconBgColor = this._config.icon_background_color;
+    if (!iconBgColor) return "rgba(255, 255, 255, 0.2)";
+    
+    if (typeof iconBgColor === 'string') {
+      return iconBgColor;
+    } else if (iconBgColor.entity) {
+      const entity = this.hass.states[iconBgColor.entity];
+      if (entity) {
+        if (entity.state === 'on') return 'rgba(255, 255, 255, 0.2)';
+        if (entity.state === 'off') return 'rgba(122, 122, 127, 0.2)';
+        if (iconBgColor.attribute && entity.attributes[iconBgColor.attribute]) {
+          return entity.attributes[iconBgColor.attribute];
+        }
+      }
+    }
+    return "rgba(255, 255, 255, 0.2)";
+  }
+
   private getTempHumidity(): string {
-    if (!this.hass || !this._config) return "N/A";
+    if (!this.hass || !this._config) return "";
     
-    const tempEntity = this._config.temperature_sensor ? 
-      this.hass.states[this._config.temperature_sensor] : null;
-    const humEntity = this._config.humidity_sensor ? 
-      this.hass.states[this._config.humidity_sensor] : null;
+    const parts: string[] = [];
     
-    if (!tempEntity || !humEntity) return "N/A";
+    if (this._config.show_temperature !== false && this._config.temperature_sensor) {
+      const tempEntity = this.hass.states[this._config.temperature_sensor];
+      if (tempEntity && tempEntity.state !== 'unavailable') {
+        const temp = parseFloat(tempEntity.state).toFixed(1);
+        const unit = this._config.temperature_unit || 'F';
+        parts.push(`${temp}°${unit}`);
+      }
+    }
     
-    const temp = parseFloat(tempEntity.state).toFixed(1);
-    const humidity = parseFloat(humEntity.state).toFixed(1);
-    const unit = this._config.temperature_unit || 'F';
+    if (this._config.show_humidity !== false && this._config.humidity_sensor) {
+      const humEntity = this.hass.states[this._config.humidity_sensor];
+      if (humEntity && humEntity.state !== 'unavailable') {
+        const humidity = parseFloat(humEntity.state).toFixed(1);
+        parts.push(`${humidity}%`);
+      }
+    }
     
-    return `${temp}°${unit} / ${humidity}%`;
+    return parts.join(' / ');
   }
 
   private handleIconClick(): void {
@@ -473,6 +537,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
     if (!this.hass || this.currentDeviceIndex === -1) return;
     
     const currentDevice = this.devices[this.currentDeviceIndex];
+    const controlEntity = currentDevice.control_entity || currentDevice.entity;
     
     if (currentDevice.type === "discrete" && currentDevice.modes) {
       const modes = currentDevice.modes;
@@ -487,11 +552,11 @@ export class RoomCard extends LitElement implements LovelaceCard {
       
       if (selectedMode.percentage === 0) {
         this.hass.callService("fan", "turn_off", {
-          entity_id: currentDevice.entity
+          entity_id: controlEntity
         });
       } else {
         this.hass.callService("fan", "set_percentage", {
-          entity_id: currentDevice.entity,
+          entity_id: controlEntity,
           percentage: selectedMode.percentage
         });
       }
@@ -501,23 +566,23 @@ export class RoomCard extends LitElement implements LovelaceCard {
       if (currentDevice.attribute === "brightness") {
         if (actualValue === 0) {
           this.hass.callService("light", "turn_off", {
-            entity_id: currentDevice.entity
+            entity_id: controlEntity
           });
         } else {
           this.hass.callService("light", "turn_on", {
-            entity_id: currentDevice.entity,
+            entity_id: controlEntity,
             brightness: actualValue,
           });
         }
       } else if (currentDevice.attribute === "volume_level") {
         if (value === 0) {
           this.hass.callService("media_player", "volume_mute", {
-            entity_id: currentDevice.entity,
+            entity_id: controlEntity,
             is_volume_muted: true
           });
         } else {
           this.hass.callService("media_player", "volume_set", {
-            entity_id: currentDevice.entity,
+            entity_id: controlEntity,
             volume_level: value,
           });
         }
@@ -531,13 +596,16 @@ export class RoomCard extends LitElement implements LovelaceCard {
     }
 
     const backgroundColor = this.getBackgroundColor();
+    const iconColor = this.getIconColor();
+    const iconBackgroundColor = this.getIconBackgroundColor();
     const tempHumidity = this.getTempHumidity();
     const roomName = this._config.name || this._config.area;
     
     const hasActiveDevice = this.currentDeviceIndex !== -1;
     const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
-    const deviceEntity = currentDevice ? this.hass.states[currentDevice.entity] : null;
+    const deviceEntity = currentDevice ? this.hass.states[currentDevice.control_entity || currentDevice.entity] : null;
     const isDeviceOn = deviceEntity && (deviceEntity.state === "on" || deviceEntity.state === "playing");
+    const showSlider = currentDevice?.show_slider !== false;
 
     // Calculate positions
     const centerX = 75;
@@ -562,20 +630,30 @@ export class RoomCard extends LitElement implements LovelaceCard {
     const progressAngle = this.sliderValue * this.totalAngle;
     const largeArcFlag = progressAngle > 180 ? 1 : 0;
 
+    // Get slider color
+    let sliderColor = '#2196F3';
+    if (currentDevice) {
+      if (currentDevice.color === 'light-color' && deviceEntity?.attributes?.rgb_color) {
+        sliderColor = `rgb(${deviceEntity.attributes.rgb_color.join(",")})`;
+      } else if (currentDevice.color && currentDevice.color !== 'light-color') {
+        sliderColor = currentDevice.color;
+      }
+    }
+
     return html`
       <div class="card-container" style="background-color: ${backgroundColor}">
         <div class="title-section">
           <div class="room-name">${roomName}</div>
-          <div class="temp-humidity">${tempHumidity}</div>
+          ${tempHumidity ? html`<div class="temp-humidity">${tempHumidity}</div>` : ''}
         </div>
 
         <div class="icon-section">
           <div class="icon-container" @click=${this.handleIconClick}>
-            <div class="icon-background">
-              <ha-icon icon="${this._config.icon || 'mdi:home'}"></ha-icon>
+            <div class="icon-background" style="background-color: ${iconBackgroundColor}">
+              <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
             </div>
             
-            ${isDeviceOn && hasActiveDevice && currentDevice ? html`
+            ${isDeviceOn && hasActiveDevice && currentDevice && showSlider ? html`
             <div class="slider-container">
               <svg class="slider-svg" width="150" height="150" viewBox="0 0 150 150"
                 @pointerdown=${this.handlePointerDown}
@@ -590,13 +668,13 @@ export class RoomCard extends LitElement implements LovelaceCard {
                 <!-- Progress arc -->
                 <path
                   class="slider-progress"
-                  style="stroke: ${currentDevice.color || '#2196F3'}"
+                  style="stroke: ${sliderColor}"
                   d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
                 />
                 <!-- Thumb -->
                 <circle
                   class="slider-thumb ${this.isDragging ? 'dragging' : ''}"
-                  style="fill: ${currentDevice.color || '#2196F3'}"
+                  style="fill: ${sliderColor}"
                   cx="${thumbX}"
                   cy="${thumbY}"
                   r="16"
@@ -615,9 +693,12 @@ export class RoomCard extends LitElement implements LovelaceCard {
 
         <div class="chips-section">
           ${this.devices.map((device, index) => {
+            if (device.show_chip === false) return '';
+            
             const entity = this.hass.states[device.entity];
-            const isOn = entity && (entity.state === "on" || entity.state === "playing");
-            const chipColor = this.getChipColor(device.entity);
+            const controlEntity = this.hass.states[device.control_entity || device.entity];
+            const isOn = controlEntity && (controlEntity.state === "on" || controlEntity.state === "playing");
+            const chipColor = this.getChipColor(device, isOn);
             
             return html`
               <div
