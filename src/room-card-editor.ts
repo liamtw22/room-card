@@ -1,5 +1,5 @@
 import { LitElement, html, css, TemplateResult, CSSResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCardEditor, fireEvent } from 'custom-card-helpers';
 
 export interface RoomCardConfig {
@@ -83,7 +83,7 @@ const ENTITY_ATTRIBUTES = {
 
 @customElement('room-card-editor')
 export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
-  @property({ attribute: false }) public hass!: HomeAssistant;
+  @state() private _hass?: HomeAssistant;
   @state() private _config?: RoomCardConfig;
   @state() private _iconSearch = '';
   @state() private _deviceIconSearch: Record<number, string> = {};
@@ -96,6 +96,11 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     devices: false
   };
   @state() private _expandedDevices: Record<number, boolean> = {};
+
+  // Setter for hass object - required for Home Assistant to pass the hass object
+  set hass(hass: HomeAssistant) {
+    this._hass = hass;
+  }
 
   public setConfig(config: RoomCardConfig): void {
     this._config = { ...config };
@@ -126,7 +131,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _valueChanged(ev: any): void {
-    if (!this._config || !this.hass) return;
+    if (!this._config || !this._hass) return;
 
     const target = ev.target;
     const configPath = target?.configPath || ev.currentTarget?.configPath;
@@ -209,19 +214,19 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _getAreas(): string[] {
-    if (!this.hass) return [];
+    if (!this._hass) return [];
     
     const areas = new Set<string>();
     
-    Object.values(this.hass.areas || {}).forEach((area: any) => {
+    Object.values(this._hass.areas || {}).forEach((area: any) => {
       if (area.name) {
         areas.add(area.name);
       }
     });
 
-    Object.values(this.hass.entities || {}).forEach((entity: any) => {
-      if (entity.area_id && this.hass.areas?.[entity.area_id]) {
-        areas.add(this.hass.areas[entity.area_id].name);
+    Object.values(this._hass.entities || {}).forEach((entity: any) => {
+      if (entity.area_id && this._hass!.areas?.[entity.area_id]) {
+        areas.add(this._hass!.areas[entity.area_id].name);
       }
     });
 
@@ -229,12 +234,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _getEntityAttributes(entity: string): string[] {
-    if (!this.hass || !entity) return [];
+    if (!this._hass || !entity) return [];
     
     const domain = entity.split('.')[0];
     const defaultAttrs = ENTITY_ATTRIBUTES[domain as keyof typeof ENTITY_ATTRIBUTES] || [];
     
-    const stateObj = this.hass.states[entity];
+    const stateObj = this._hass.states[entity];
     if (stateObj?.attributes) {
       const customAttrs = Object.keys(stateObj.attributes).filter(
         attr => !['friendly_name', 'icon', 'entity_id'].includes(attr)
@@ -372,7 +377,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             ></ha-textfield>
           ` : html`
             <ha-entity-picker
-              .hass=${this.hass}
+              .hass=${this._hass}
               .value=${(this._config!.icon_color as any)?.entity || ''}
               .configPath=${'icon_color.entity'}
               @value-changed=${this._valueChanged}
@@ -410,7 +415,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             ></ha-textfield>
           ` : html`
             <ha-entity-picker
-              .hass=${this.hass}
+              .hass=${this._hass}
               .value=${(this._config!.icon_background_color as any)?.entity || ''}
               .configPath=${'icon_background_color.entity'}
               @value-changed=${this._valueChanged}
@@ -445,7 +450,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
 
           ${this._config!.background_type === 'entity' ? html`
             <ha-entity-picker
-              .hass=${this.hass}
+              .hass=${this._hass}
               .value=${this._config!.background_entity || ''}
               .configPath=${'background_entity'}
               @value-changed=${this._valueChanged}
@@ -476,15 +481,19 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _renderSensorsSection(): TemplateResult {
-    const entities = Object.keys(this.hass.states).sort();
+    if (!this._hass) {
+      return html`<div class="section-content">Loading sensors...</div>`;
+    }
+
+    const entities = Object.keys(this._hass.states).sort();
     const temperatureSensors = entities.filter(e => 
       e.includes('temperature') || 
       e.includes('temp') || 
-      this.hass.states[e].attributes.device_class === 'temperature'
+      this._hass!.states[e].attributes.device_class === 'temperature'
     );
     const humiditySensors = entities.filter(e => 
       e.includes('humidity') || 
-      this.hass.states[e].attributes.device_class === 'humidity'
+      this._hass!.states[e].attributes.device_class === 'humidity'
     );
 
     return html`
@@ -495,7 +504,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       >
         <div class="section-content">
           <ha-entity-picker
-            .hass=${this.hass}
+            .hass=${this._hass}
             .value=${this._config!.temperature_sensor || ''}
             .configPath=${'temperature_sensor'}
             @value-changed=${this._valueChanged}
@@ -506,7 +515,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           ></ha-entity-picker>
 
           <ha-entity-picker
-            .hass=${this.hass}
+            .hass=${this._hass}
             .value=${this._config!.humidity_sensor || ''}
             .configPath=${'humidity_sensor'}
             @value-changed=${this._valueChanged}
@@ -550,6 +559,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _renderDevicesSection(): TemplateResult {
+    if (!this._hass) {
+      return html`<div class="section-content">Loading devices...</div>`;
+    }
+
     return html`
       <ha-expansion-panel
         .header=${'Devices'}
@@ -585,7 +598,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
               >
                 <div class="device-content">
                   <ha-entity-picker
-                    .hass=${this.hass}
+                    .hass=${this._hass}
                     .value=${device.entity || ''}
                     @value-changed=${(e: any) => {
                       const devices = [...this._config!.devices!];
@@ -598,7 +611,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                   ></ha-entity-picker>
 
                   <ha-entity-picker
-                    .hass=${this.hass}
+                    .hass=${this._hass}
                     .value=${device.control_entity || ''}
                     @value-changed=${(e: any) => {
                       const devices = [...this._config!.devices!];
@@ -798,7 +811,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   protected render(): TemplateResult {
-    if (!this.hass || !this._config) {
+    if (!this._hass || !this._config) {
       return html`<div class="error">Unable to load editor</div>`;
     }
 
