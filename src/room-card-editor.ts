@@ -1,7 +1,46 @@
 import { LitElement, html, css, TemplateResult, CSSResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCardEditor, fireEvent } from 'custom-card-helpers';
-import { RoomCardConfig } from './types';
+
+export interface RoomCardConfig {
+  type: 'custom:room-card';
+  area: string; // Required area instead of entity
+  name?: string;
+  icon?: string;
+  temperature_sensor?: string;
+  humidity_sensor?: string;
+  devices?: DeviceConfig[];
+  background_colors?: TemperatureColors;
+  haptic_feedback?: boolean;
+  show_temperature?: boolean;
+  show_humidity?: boolean;
+  temperature_unit?: 'C' | 'F';
+}
+
+export interface DeviceConfig {
+  entity: string;
+  attribute?: string;
+  icon?: string;
+  color?: string;
+  scale?: number;
+  type?: 'continuous' | 'discrete';
+  modes?: DeviceMode[];
+}
+
+export interface DeviceMode {
+  value: number;
+  label: string;
+  percentage: number;
+  icon?: string;
+}
+
+export interface TemperatureColors {
+  cold: string;
+  cool: string;
+  comfortable: string;
+  warm: string;
+  hot: string;
+}
 
 @customElement('room-card-editor')
 export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
@@ -50,9 +89,11 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     const devices = [...(this._config.devices || [])];
     devices.push({
       entity: '',
-      name: '',
-      type: 'light',
-      control_type: 'continuous'
+      attribute: 'brightness',
+      icon: 'mdi:lightbulb',
+      color: '#FDD835',
+      scale: 255,
+      type: 'continuous'
     });
     
     this._config = { ...this._config, devices };
@@ -87,17 +128,42 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     fireEvent(this, 'config-changed', { config: this._config });
   }
 
+  private _getAreas(): string[] {
+    if (!this.hass) return [];
+    
+    // Get all unique areas from entities
+    const areas = new Set<string>();
+    
+    Object.values(this.hass.areas || {}).forEach((area: any) => {
+      if (area.name) {
+        areas.add(area.name);
+      }
+    });
+
+    // Also check entities for area_id references
+    Object.values(this.hass.entities || {}).forEach((entity: any) => {
+      if (entity.area_id && this.hass.areas?.[entity.area_id]) {
+        areas.add(this.hass.areas[entity.area_id].name);
+      }
+    });
+
+    return Array.from(areas).sort();
+  }
+
   protected render(): TemplateResult {
     if (!this.hass || !this._config) {
       return html`<div class="error">Unable to load editor</div>`;
     }
 
     const entities = Object.keys(this.hass.states).sort();
+    const areas = this._getAreas();
+    
     const temperatureSensors = entities.filter(e => 
       e.includes('temperature') || 
       e.includes('temp') || 
       this.hass.states[e].attributes.device_class === 'temperature'
     );
+    
     const humiditySensors = entities.filter(e => 
       e.includes('humidity') || 
       this.hass.states[e].attributes.device_class === 'humidity'
@@ -106,10 +172,44 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     return html`
       <div class="card-config">
         <ha-textfield
-          label="Name (Required)"
+          label="Area (Required)"
+          .value=${this._config.area || ''}
+          .configPath=${'area'}
+          @input=${this._valueChanged}
+          helper="The area this room card represents"
+        ></ha-textfield>
+
+        ${areas.length > 0 ? html`
+          <ha-select
+            naturalMenuWidth
+            fixedMenuPosition
+            label="Or select from available areas"
+            .configPath=${'area'}
+            .value=${this._config.area || ''}
+            @selected=${this._valueChanged}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="">Select an area</ha-list-item>
+            ${areas.map(area => html`
+              <ha-list-item value=${area}>${area}</ha-list-item>
+            `)}
+          </ha-select>
+        ` : ''}
+
+        <ha-textfield
+          label="Display Name (Optional)"
           .value=${this._config.name || ''}
           .configPath=${'name'}
           @input=${this._valueChanged}
+          helper="Leave empty to use the area name"
+        ></ha-textfield>
+
+        <ha-textfield
+          label="Icon (Optional)"
+          .value=${this._config.icon || ''}
+          .configPath=${'icon'}
+          @input=${this._valueChanged}
+          helper="MDI icon name (e.g., mdi:home)"
         ></ha-textfield>
 
         <ha-select
@@ -212,43 +312,69 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             ></ha-entity-picker>
 
             <ha-textfield
-              label="Name (Optional)"
-              .value=${device.name || ''}
-              .field=${'name'}
+              label="Attribute"
+              .value=${device.attribute || ''}
+              .field=${'attribute'}
               @input=${(e: any) => this._deviceValueChanged(e, index)}
+              helper="e.g., brightness, volume_level, percentage"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Icon"
+              .value=${device.icon || ''}
+              .field=${'icon'}
+              @input=${(e: any) => this._deviceValueChanged(e, index)}
+              helper="MDI icon name"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Color"
+              .value=${device.color || ''}
+              .field=${'color'}
+              @input=${(e: any) => this._deviceValueChanged(e, index)}
+              helper="Hex color code (e.g., #FDD835)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Scale"
+              type="number"
+              .value=${device.scale || 100}
+              .field=${'scale'}
+              @input=${(e: any) => this._deviceValueChanged(e, index)}
+              helper="Maximum value (255 for brightness, 1 for volume, 100 for percentage)"
             ></ha-textfield>
 
             <ha-select
               naturalMenuWidth
               fixedMenuPosition
-              label="Device Type"
-              .value=${device.type}
+              label="Control Type"
+              .value=${device.type || 'continuous'}
               .field=${'type'}
               @selected=${(e: any) => this._deviceValueChanged(e, index)}
               @closed=${(e: Event) => e.stopPropagation()}
             >
-              <ha-list-item value="light">Light</ha-list-item>
-              <ha-list-item value="speaker">Speaker</ha-list-item>
-              <ha-list-item value="purifier">Air Purifier</ha-list-item>
-              <ha-list-item value="fan">Fan</ha-list-item>
-              <ha-list-item value="climate">Climate</ha-list-item>
-              <ha-list-item value="switch">Switch</ha-list-item>
-              <ha-list-item value="cover">Cover</ha-list-item>
-              <ha-list-item value="vacuum">Vacuum</ha-list-item>
+              <ha-list-item value="continuous">Continuous (Slider)</ha-list-item>
+              <ha-list-item value="discrete">Discrete (Modes)</ha-list-item>
             </ha-select>
 
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Control Type"
-              .value=${device.control_type || 'continuous'}
-              .field=${'control_type'}
-              @selected=${(e: any) => this._deviceValueChanged(e, index)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              <ha-list-item value="continuous">Slider</ha-list-item>
-              <ha-list-item value="discrete">Buttons</ha-list-item>
-            </ha-select>
+            ${device.type === 'discrete' ? html`
+              <div class="modes-section">
+                <label>Discrete Modes (JSON format)</label>
+                <ha-textfield
+                  label="Modes JSON"
+                  .value=${JSON.stringify(device.modes || [])}
+                  @input=${(e: any) => {
+                    try {
+                      const modes = JSON.parse(e.target.value);
+                      this._deviceValueChanged({ target: { field: 'modes', value: modes }}, index);
+                    } catch (err) {
+                      // Invalid JSON, ignore
+                    }
+                  }}
+                  helper='[{"value":0,"label":"Off","percentage":0},{"value":0.5,"label":"Medium","percentage":50}]'
+                ></ha-textfield>
+              </div>
+            ` : ''}
           </div>
         `) || ''}
       </div>
@@ -314,6 +440,18 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         align-items: center;
         justify-content: space-between;
         font-weight: 500;
+      }
+
+      .modes-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .modes-section label {
+        font-size: 0.9em;
+        font-weight: 500;
+        color: var(--secondary-text-color);
       }
     `;
   }

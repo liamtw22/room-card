@@ -1,22 +1,83 @@
-// utils/color-utils.ts
-import { TemperatureColors } from '../types';
+import { HomeAssistant } from 'custom-card-helpers';
+import { BackgroundConfig, TemperatureColors } from '../types';
 import { 
   DEFAULT_TEMPERATURE_COLORS, 
-  TEMPERATURE_RANGES
+  TEMPERATURE_RANGES_F,
+  TEMPERATURE_RANGES_C
 } from '../config';
+
+export function getBackgroundColor(
+  hass: HomeAssistant,
+  background?: BackgroundConfig,
+  temperature?: number,
+  temperatureUnit?: string
+): string {
+  if (!background) {
+    return 'var(--card-background-color)';
+  }
+
+  switch (background.type) {
+    case 'solid':
+      return background.color || 'var(--card-background-color)';
+      
+    case 'temperature':
+      return getTemperatureColor(temperature, background.temperature_colors, temperatureUnit);
+      
+    case 'entity':
+      if (!background.entity || !hass.states[background.entity]) {
+        return 'var(--card-background-color)';
+      }
+      
+      const entity = hass.states[background.entity];
+      const state = entity.state;
+      const numericValue = parseFloat(state);
+      
+      // Check custom ranges
+      if (background.ranges) {
+        // First check state-based ranges
+        for (const range of background.ranges) {
+          if (range.state && state === range.state) {
+            return range.color;
+          }
+        }
+        
+        // Then check numeric ranges
+        if (!isNaN(numericValue)) {
+          for (const range of background.ranges) {
+            if (range.min !== undefined || range.max !== undefined) {
+              const min = range.min ?? -Infinity;
+              const max = range.max ?? Infinity;
+              if (numericValue >= min && numericValue < max) {
+                return range.color;
+              }
+            }
+          }
+        }
+      }
+      
+      // Default colors for common states
+      if (state === 'on') return '#4CAF50';
+      if (state === 'off') return '#757575';
+      if (state === 'unavailable') return '#424242';
+      
+      return 'var(--card-background-color)';
+      
+    default:
+      return 'var(--card-background-color)';
+  }
+}
 
 export function getTemperatureColor(
   temperature: number | undefined,
-  customColors?: TemperatureColors
+  customColors?: TemperatureColors,
+  unit?: string
 ): string {
   if (temperature === undefined) {
     return 'var(--card-background-color)';
   }
 
   const colors = customColors || DEFAULT_TEMPERATURE_COLORS;
-  
-  // Default to Fahrenheit ranges
-  const ranges = TEMPERATURE_RANGES;
+  const ranges = unit === 'C' ? TEMPERATURE_RANGES_C : TEMPERATURE_RANGES_F;
 
   if (temperature < ranges.cool.min) return colors.cold;
   if (temperature < ranges.comfortable.min) return colors.cool;
@@ -30,8 +91,6 @@ export function interpolateColor(
   color2: string,
   factor: number
 ): string {
-  // Simple color interpolation
-  // This is a basic implementation - could be enhanced with proper color space conversion
   const hex2rgb = (hex: string): [number, number, number] => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result 

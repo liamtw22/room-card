@@ -10,36 +10,54 @@ import { customElement, property, state } from 'lit/decorators.js';
 import {
   HomeAssistant,
   LovelaceCard,
-  ActionHandlerEvent,
-  handleAction,
-  hasAction
+  LovelaceCardConfig
 } from 'custom-card-helpers';
 
 // Import version from package.json
 import { version } from '../package.json';
 
-// Import types
-import { 
-  RoomCardConfig, 
-  RoomData, 
-  ProcessedDevice, 
-  DeviceConfig
-} from './types';
-
-// Import config and validation
-import { 
-  DEFAULT_CONFIG, 
-  validateConfig,
-  mergeDeviceConfig 
-} from './config';
-
-// Import utilities
-import { actionHandler } from './utils/action-handler';
-import { HapticFeedback } from './utils/haptic-feedback';
-import { getTemperatureColor } from './utils/color-utils';
-
 // Import editor
 import './room-card-editor';
+
+// Types
+export interface RoomCardConfig extends LovelaceCardConfig {
+  type: 'custom:room-card';
+  area: string; // Required area instead of entity
+  name?: string;
+  temperature_sensor?: string;
+  humidity_sensor?: string;
+  devices?: DeviceConfig[];
+  background_colors?: TemperatureColors;
+  haptic_feedback?: boolean;
+  show_temperature?: boolean;
+  show_humidity?: boolean;
+  temperature_unit?: 'C' | 'F';
+}
+
+export interface DeviceConfig {
+  entity: string;
+  attribute?: string;
+  icon?: string;
+  color?: string;
+  scale?: number;
+  type?: 'continuous' | 'discrete';
+  modes?: DeviceMode[];
+}
+
+export interface DeviceMode {
+  value: number;
+  label: string;
+  percentage: number;
+  icon?: string;
+}
+
+export interface TemperatureColors {
+  cold: string;
+  cool: string;
+  comfortable: string;
+  warm: string;
+  hot: string;
+}
 
 // Register the card
 window.customCards = window.customCards || [];
@@ -47,8 +65,7 @@ window.customCards.push({
   type: 'room-card',
   name: 'Room Card',
   preview: true,
-  description: 'Room card with temperature, humidity and device controls',
-  documentationURL: 'https://github.com/yourusername/room-card'
+  description: 'A custom room card with circular slider control'
 });
 
 console.info(
@@ -61,598 +78,742 @@ console.info(
 export class RoomCard extends LitElement implements LovelaceCard {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config?: RoomCardConfig;
-  @state() private _roomData?: RoomData;
-  
+  @state() private currentDeviceIndex = -1;
+  @state() private isDragging = false;
+  @state() private sliderValue = 0;
+  @state() private devices: DeviceConfig[] = [];
+
+  // Slider configuration
+  private startAngle = -110;
+  private endAngle = 30;
+  private totalAngle = 140;
+  private actionTaken = false;
+  private thumbTapped = false;
+  private _handleMove?: (e: PointerEvent) => void;
+  private _handleUp?: (e: PointerEvent) => void;
+
   public setConfig(config: RoomCardConfig): void {
-    try {
-      validateConfig(config);
-      this._config = { ...DEFAULT_CONFIG, ...config };
-      this.requestUpdate();
-    } catch (e) {
-      throw new Error(`Room Card Configuration Error: ${e}`);
+    if (!config.area) {
+      throw new Error("You need to define an area");
     }
+    
+    this._config = config;
+    this._initializeDevices();
   }
 
-  public getCardSize(): number {
-    return this._config?.devices ? Math.max(4, 3 + Math.ceil(this._config.devices.length / 3)) : 4;
+  private _initializeDevices(): void {
+    if (!this._config) return;
+
+    // Default devices configuration
+    this.devices = this._config.devices || [
+      {
+        entity: `light.${this._config.area.toLowerCase().replace(/\s+/g, '_')}_lights`,
+        attribute: "brightness",
+        icon: "mdi:lightbulb",
+        color: "#FDD835",
+        scale: 255,
+        type: "continuous"
+      },
+      {
+        entity: `media_player.${this._config.area.toLowerCase().replace(/\s+/g, '_')}_speakers`,
+        attribute: "volume_level",
+        icon: "mdi:speaker",
+        color: "#FF9800",
+        scale: 1,
+        type: "continuous"
+      },
+      {
+        entity: `fan.${this._config.area.toLowerCase().replace(/\s+/g, '_')}_purifier`,
+        attribute: "percentage",
+        icon: "mdi:air-purifier",
+        color: "#2196F3",
+        scale: 100,
+        type: "discrete",
+        modes: [
+          { value: 0, label: "Off", percentage: 0 },
+          { value: 0.33, label: "Sleep", percentage: 33 },
+          { value: 0.66, label: "Low", percentage: 66 },
+          { value: 1, label: "High", percentage: 100 }
+        ]
+      }
+    ];
   }
 
   protected shouldUpdate(changedProperties: PropertyValues): boolean {
-    if (!this._config) {
-      return false;
-    }
-    
-    if (changedProperties.has('_config')) {
+    if (changedProperties.has('hass') || changedProperties.has('_config')) {
+      this.updateCurrentDevice();
+      this.updateSliderValue();
       return true;
     }
-    
-    if (changedProperties.has('hass')) {
-      // Check if any relevant entities have changed
-      const oldHass = changedProperties.get('hass') as HomeAssistant | undefined;
-      if (!oldHass) return true;
-      
-      // Check temperature sensor
-      if (this._config.temperature_sensor &&
-          oldHass.states[this._config.temperature_sensor] !== this.hass.states[this._config.temperature_sensor]) {
-        return true;
-      }
-      
-      // Check humidity sensor
-      if (this._config.humidity_sensor &&
-          oldHass.states[this._config.humidity_sensor] !== this.hass.states[this._config.humidity_sensor]) {
-        return true;
-      }
-      
-      // Check devices
-      if (this._config.devices) {
-        for (const device of this._config.devices) {
-          if (oldHass.states[device.entity] !== this.hass.states[device.entity]) {
-            return true;
-          }
-        }
-      }
-    }
-    
     return false;
   }
 
-  protected updated(changedProperties: PropertyValues): void {
-    super.updated(changedProperties);
-    if ((changedProperties.has('hass') || changedProperties.has('_config')) && this._config) {
-      this._updateRoomData();
-    }
-  }
+  private updateCurrentDevice(): void {
+    if (!this.hass) return;
 
-  private _updateRoomData(): void {
-    if (!this.hass || !this._config) return;
-
-    const tempEntity = this._config.temperature_sensor 
-      ? this.hass.states[this._config.temperature_sensor]
-      : undefined;
-    
-    const humidityEntity = this._config.humidity_sensor
-      ? this.hass.states[this._config.humidity_sensor]
-      : undefined;
-
-    const temperature = tempEntity?.state !== 'unavailable' 
-      ? parseFloat(tempEntity?.state || '0') 
-      : undefined;
-    
-    const humidity = humidityEntity?.state !== 'unavailable'
-      ? parseFloat(humidityEntity?.state || '0')
-      : undefined;
-
-    const devices: ProcessedDevice[] = this._config.devices?.map(device => {
-      const entity = this.hass.states[device.entity];
-      const mergedConfig = mergeDeviceConfig(device, device.type);
-      
-      return {
-        ...mergedConfig,
-        current_value: this._getDeviceValue(entity, mergedConfig),
-        is_on: entity?.state === 'on',
-        available: entity?.state !== 'unavailable'
-      };
-    }) || [];
-
-    this._roomData = {
-      temperature,
-      humidity,
-      temperature_unit: this._config.temperature_unit || 'F',
-      devices,
-      background_color: getTemperatureColor(
-        temperature, 
-        this._config.background_colors
-      )
-    };
-  }
-
-  private _getDeviceValue(entity: any, device: DeviceConfig): number | string {
-    if (!entity || entity.state === 'unavailable') return device.min_value || 0;
-    
-    switch (device.type) {
-      case 'light':
-        return entity.attributes?.brightness || 0;
-        
-      case 'speaker':
-        const volume = entity.attributes?.volume_level;
-        return volume !== undefined ? Math.round(volume * 100) : 0;
-        
-      case 'purifier':
-      case 'fan':
-        const presetMode = entity.attributes?.preset_mode || entity.attributes?.speed;
-        if (device.modes && presetMode) {
-          const index = device.modes.indexOf(presetMode);
-          return index >= 0 ? index / (device.modes.length - 1) : 0;
+    if (this.currentDeviceIndex === -1) {
+      for (let i = 0; i < this.devices.length; i++) {
+        const entity = this.hass.states[this.devices[i].entity];
+        if (entity && (entity.state === "on" || entity.state === "playing")) {
+          this.currentDeviceIndex = i;
+          return;
         }
-        return entity.state === 'on' ? 1 : 0;
-        
-      default:
-        if (entity.attributes?.percentage !== undefined) {
-          return entity.attributes.percentage;
-        }
-        return entity.state === 'on' ? 1 : 0;
-    }
-  }
-
-  private async _handleDeviceControl(device: ProcessedDevice, value: number | string): Promise<void> {
-    if (!this.hass || !device.available) return;
-
-    const entity = this.hass.states[device.entity];
-    if (!entity) return;
-
-    // Haptic feedback
-    if (this._config?.haptic_feedback) {
-      HapticFeedback.vibrate(50);
-    }
-
-    try {
-      switch (device.type) {
-        case 'light':
-          await this.hass.callService('light', 'turn_on', {
-            entity_id: device.entity,
-            brightness: Math.round(Number(value))
-          });
-          break;
-          
-        case 'speaker':
-          await this.hass.callService('media_player', 'volume_set', {
-            entity_id: device.entity,
-            volume_level: Number(value) / 100
-          });
-          break;
-          
-        case 'purifier':
-        case 'fan':
-          if (device.modes && device.control_type === 'discrete') {
-            const modeIndex = Math.round(Number(value) * (device.modes.length - 1));
-            const mode = device.modes[modeIndex];
-            
-            if (modeIndex === 0 || mode === 'Off') {
-              await this.hass.callService('fan', 'turn_off', {
-                entity_id: device.entity
-              });
-            } else {
-              await this.hass.callService('fan', 'set_preset_mode', {
-                entity_id: device.entity,
-                preset_mode: mode
-              });
-            }
-          } else {
-            await this.hass.callService('fan', 'set_percentage', {
-              entity_id: device.entity,
-              percentage: Math.round(Number(value))
-            });
-          }
-          break;
-          
-        default:
-          // Generic switch/toggle
-          await this.hass.callService('homeassistant', Number(value) > 50 ? 'turn_on' : 'turn_off', {
-            entity_id: device.entity
-          });
       }
-    } catch (e) {
-      console.error('Error controlling device:', e);
+      this.currentDeviceIndex = -1;
+    } else {
+      const currentDevice = this.devices[this.currentDeviceIndex];
+      const entity = this.hass.states[currentDevice.entity];
+      if (!entity || (entity.state !== "on" && entity.state !== "playing")) {
+        this.currentDeviceIndex = -1;
+        this.updateCurrentDevice();
+      }
     }
   }
 
-  private async _handleDeviceToggle(device: ProcessedDevice): Promise<void> {
-    if (!this.hass || !device.available) return;
-
-    // Haptic feedback
-    if (this._config?.haptic_feedback) {
-      HapticFeedback.vibrate(50);
+  private updateSliderValue(): void {
+    if (!this.hass || this.currentDeviceIndex === -1) {
+      this.sliderValue = 0;
+      return;
     }
 
-    try {
-      await this.hass.callService('homeassistant', 'toggle', {
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    const entity = this.hass.states[currentDevice.entity];
+    
+    if (!entity || (entity.state !== "on" && entity.state !== "playing")) {
+      this.sliderValue = 0;
+      return;
+    }
+
+    if (currentDevice.type === "discrete" && currentDevice.modes) {
+      const percentage = entity.attributes[currentDevice.attribute || 'percentage'] || 0;
+      const modes = currentDevice.modes;
+      let closestMode = modes[0];
+      let minDiff = Math.abs(percentage - modes[0].percentage);
+      
+      for (let i = 1; i < modes.length; i++) {
+        const diff = Math.abs(percentage - modes[i].percentage);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestMode = modes[i];
+        }
+      }
+      this.sliderValue = closestMode.value;
+    } else {
+      const value = entity.attributes[currentDevice.attribute || 'brightness'];
+      if (value !== undefined && currentDevice.scale) {
+        this.sliderValue = value / currentDevice.scale;
+      }
+    }
+  }
+
+  private getBackgroundColor(): string {
+    if (!this.hass || !this._config?.temperature_sensor) return "#353535";
+    
+    const tempEntity = this.hass.states[this._config.temperature_sensor];
+    if (!tempEntity) return "#353535";
+
+    const temp = parseFloat(tempEntity.state);
+    const unit = this._config.temperature_unit || 'F';
+    
+    // Convert to Fahrenheit if needed for consistent ranges
+    const tempF = unit === 'C' ? (temp * 9/5) + 32 : temp;
+    
+    if (tempF < 61) return this._config.background_colors?.cold || "#CEB2F5";
+    else if (tempF < 64) return this._config.background_colors?.cool || "#a3d9f5";
+    else if (tempF < 72) return this._config.background_colors?.comfortable || "#cde3db";
+    else if (tempF < 75) return this._config.background_colors?.warm || "#fbd9a0";
+    else if (tempF < 81) return this._config.background_colors?.hot || "#f4a8a3";
+    else return "#df7b74";
+  }
+
+  private getTempHumidity(): string {
+    if (!this.hass || !this._config) return "N/A";
+    
+    const tempEntity = this._config.temperature_sensor ? 
+      this.hass.states[this._config.temperature_sensor] : null;
+    const humEntity = this._config.humidity_sensor ? 
+      this.hass.states[this._config.humidity_sensor] : null;
+    
+    if (!tempEntity || !humEntity) return "N/A";
+    
+    const temp = parseFloat(tempEntity.state).toFixed(1);
+    const humidity = parseFloat(humEntity.state).toFixed(1);
+    const unit = this._config.temperature_unit || 'F';
+    
+    return `${temp}°${unit} / ${humidity}%`;
+  }
+
+  private handleIconClick(): void {
+    if (!this.hass) return;
+
+    const startIndex = this.currentDeviceIndex;
+    let nextIndex = (startIndex + 1) % this.devices.length;
+    let found = false;
+    
+    for (let i = 0; i < this.devices.length; i++) {
+      const device = this.devices[nextIndex];
+      const entity = this.hass.states[device.entity];
+      if (entity && (entity.state === "on" || entity.state === "playing")) {
+        this.currentDeviceIndex = nextIndex;
+        found = true;
+        break;
+      }
+      nextIndex = (nextIndex + 1) % this.devices.length;
+    }
+    
+    if (!found) {
+      this.currentDeviceIndex = -1;
+    }
+    
+    this.updateSliderValue();
+    this.vibrate();
+    this.requestUpdate();
+  }
+
+  private handleChipClick(index: number): void {
+    if (!this.hass) return;
+
+    const device = this.devices[index];
+    const entity = this.hass.states[device.entity];
+    
+    if (!entity) return;
+    
+    const isOn = entity.state === "on" || entity.state === "playing";
+    
+    if (isOn) {
+      const domain = device.entity.split('.')[0];
+      this.hass.callService(domain, "turn_off", {
         entity_id: device.entity
       });
-    } catch (e) {
-      console.error('Error toggling device:', e);
+      
+      if (this.currentDeviceIndex === index) {
+        this.currentDeviceIndex = -1;
+        setTimeout(() => {
+          this.updateCurrentDevice();
+          this.updateSliderValue();
+          this.requestUpdate();
+        }, 100);
+      }
+    } else {
+      const domain = device.entity.split('.')[0];
+      const service_data: any = { entity_id: device.entity };
+      
+      if (domain === "light") {
+        service_data.brightness = 128;
+      } else if (domain === "media_player") {
+        service_data.volume_level = 0.3;
+      } else if (domain === "fan") {
+        service_data.percentage = 33;
+      }
+      
+      this.hass.callService(domain, "turn_on", service_data);
+      
+      this.currentDeviceIndex = index;
+      setTimeout(() => {
+        this.updateSliderValue();
+        this.requestUpdate();
+      }, 100);
+    }
+    
+    this.vibrate();
+  }
+
+  private getChipColor(entity: string): string {
+    if (!this.hass) return "#353535";
+    
+    const stateObj = this.hass.states[entity];
+    if (!stateObj || (stateObj.state !== "on" && stateObj.state !== "playing")) {
+      return "#353535";
+    }
+
+    // Special handling for lights with RGB
+    if (entity.includes('light') && stateObj.attributes.rgb_color) {
+      return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
+    }
+
+    // Return device color
+    const deviceIndex = this.devices.findIndex(d => d.entity === entity);
+    return deviceIndex >= 0 && this.devices[deviceIndex].color ? 
+      this.devices[deviceIndex].color : "#353535";
+  }
+
+  private vibrate(): void {
+    if (this._config?.haptic_feedback !== false && "vibrate" in navigator) {
+      navigator.vibrate(50);
     }
   }
 
-  private _handleAction(ev: ActionHandlerEvent, device: ProcessedDevice): void {
-    if (this.hass && device.available && ev.detail.action) {
-      let config;
-      switch (ev.detail.action) {
-        case 'tap':
-          config = device.tap_action;
-          break;
-        case 'hold':
-          config = device.hold_action;
-          break;
-        case 'double_tap':
-          config = device.double_tap_action;
-          break;
+  // Circular slider methods
+  private degreesToRadians(degrees: number): number {
+    return degrees * Math.PI / 180;
+  }
+
+  private radiansToDegrees(radians: number): number {
+    return radians * 180 / Math.PI;
+  }
+
+  private normalizeAngle(angle: number): number {
+    while (angle < 0) angle += 360;
+    while (angle >= 360) angle -= 360;
+    return angle;
+  }
+
+  private angleToValue(angle: number): number {
+    let normalizedAngle = this.normalizeAngle(angle);
+    let normalizedStart = this.normalizeAngle(this.startAngle);
+    
+    let angleFromStart = normalizedAngle - normalizedStart;
+    if (angleFromStart < 0) angleFromStart += 360;
+    
+    if (angleFromStart > this.totalAngle) {
+      let distToStart = Math.min(angleFromStart, 360 - angleFromStart);
+      let distToEnd = Math.min(Math.abs(angleFromStart - this.totalAngle), 360 - Math.abs(angleFromStart - this.totalAngle));
+      return distToStart < distToEnd ? 0 : 1;
+    }
+    
+    return angleFromStart / this.totalAngle;
+  }
+
+  private valueToAngle(value: number): number {
+    return this.startAngle + (value * this.totalAngle);
+  }
+
+  private pointToAngle(x: number, y: number, centerX: number, centerY: number): number {
+    let angle = Math.atan2(y - centerY, x - centerX);
+    return this.radiansToDegrees(angle);
+  }
+
+  private snapToNearestMode(value: number): number {
+    if (this.currentDeviceIndex === -1) return value;
+    
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    if (currentDevice.type !== "discrete" || !currentDevice.modes) return value;
+    
+    const modes = currentDevice.modes;
+    let closestMode = modes[0];
+    let minDiff = Math.abs(value - modes[0].value);
+    
+    for (let i = 1; i < modes.length; i++) {
+      const diff = Math.abs(value - modes[i].value);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestMode = modes[i];
       }
-      if (config) {
-        handleAction(this, this.hass, config, ev.detail.action);
+    }
+    
+    return closestMode.value;
+  }
+
+  private handlePointerDown(e: PointerEvent): void {
+    const svg = e.currentTarget as SVGElement;
+    if (!svg) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    this.isDragging = true;
+    this.actionTaken = true;
+    
+    svg.setPointerCapture(e.pointerId);
+    
+    this.handlePointerMove(e);
+  }
+
+  private handlePointerMove(e: PointerEvent): void {
+    if (!this.isDragging || !this.actionTaken) return;
+    
+    const svg = this.shadowRoot?.querySelector(".slider-svg") as SVGElement;
+    if (!svg) return;
+    
+    const rect = svg.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    const angle = this.pointToAngle(e.clientX, e.clientY, centerX, centerY);
+    let newValue = this.angleToValue(angle);
+    
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    if (currentDevice && currentDevice.type === "discrete") {
+      newValue = this.snapToNearestMode(newValue);
+      
+      if (Math.abs(newValue - this.sliderValue) > 0.01) {
+        this.vibrate();
+      }
+    } else {
+      const valueDiff = Math.abs(newValue - this.sliderValue);
+      if (valueDiff < 0.005 && newValue !== 0 && newValue !== 1) {
+        return;
+      }
+    }
+    
+    this.sliderValue = newValue;
+    this.requestUpdate();
+  }
+
+  private handlePointerUp(e: PointerEvent): void {
+    if (!this.isDragging) return;
+    
+    const svg = e.currentTarget as SVGElement;
+    if (svg) {
+      svg.releasePointerCapture(e.pointerId);
+    }
+    
+    this.isDragging = false;
+    this.thumbTapped = false;
+    
+    if (this.actionTaken) {
+      this.updateDeviceValue(this.sliderValue);
+      this.actionTaken = false;
+    }
+    
+    this.requestUpdate();
+  }
+
+  private updateDeviceValue(value: number): void {
+    if (!this.hass || this.currentDeviceIndex === -1) return;
+    
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    
+    if (currentDevice.type === "discrete" && currentDevice.modes) {
+      const modes = currentDevice.modes;
+      let selectedMode = modes[0];
+      
+      for (const mode of modes) {
+        if (Math.abs(value - mode.value) < 0.01) {
+          selectedMode = mode;
+          break;
+        }
+      }
+      
+      if (selectedMode.percentage === 0) {
+        this.hass.callService("fan", "turn_off", {
+          entity_id: currentDevice.entity
+        });
+      } else {
+        this.hass.callService("fan", "set_percentage", {
+          entity_id: currentDevice.entity,
+          percentage: selectedMode.percentage
+        });
+      }
+    } else {
+      const actualValue = Math.round(value * (currentDevice.scale || 100));
+
+      if (currentDevice.attribute === "brightness") {
+        if (actualValue === 0) {
+          this.hass.callService("light", "turn_off", {
+            entity_id: currentDevice.entity
+          });
+        } else {
+          this.hass.callService("light", "turn_on", {
+            entity_id: currentDevice.entity,
+            brightness: actualValue,
+          });
+        }
+      } else if (currentDevice.attribute === "volume_level") {
+        if (value === 0) {
+          this.hass.callService("media_player", "volume_mute", {
+            entity_id: currentDevice.entity,
+            is_volume_muted: true
+          });
+        } else {
+          this.hass.callService("media_player", "volume_set", {
+            entity_id: currentDevice.entity,
+            volume_level: value,
+          });
+        }
       }
     }
   }
 
-  protected render(): TemplateResult | void {
+  protected render(): TemplateResult {
     if (!this._config || !this.hass) {
       return html``;
     }
 
-    if (!this._roomData) {
-      return html`
-        <ha-card>
-          <div class="card-content">
-            <div class="warning">Loading...</div>
-          </div>
-        </ha-card>
-      `;
-    }
-
-    return html`
-      <ha-card style="background: ${this._roomData.background_color}">
-        <div class="card-content">
-          ${this._renderHeader()}
-          ${this._roomData.devices.length > 0 ? this._renderDevices() : ''}
-        </div>
-      </ha-card>
-    `;
-  }
-
-  private _renderHeader(): TemplateResult {
-    return html`
-      <div class="header">
-        <h2 class="room-name">${this._config!.name}</h2>
-        ${this._renderSensors()}
-      </div>
-    `;
-  }
-
-  private _renderSensors(): TemplateResult {
-    const { temperature, humidity, temperature_unit } = this._roomData!;
+    const backgroundColor = this.getBackgroundColor();
+    const tempHumidity = this.getTempHumidity();
+    const roomName = this._config.name || this._config.area;
     
-    return html`
-      <div class="sensors">
-        ${this._config!.show_temperature !== false && temperature !== undefined ? html`
-          <div class="sensor temperature">
-            <ha-icon icon="mdi:thermometer"></ha-icon>
-            <span>${temperature.toFixed(1)}°${temperature_unit}</span>
-          </div>
-        ` : ''}
-        
-        ${this._config!.show_humidity !== false && humidity !== undefined ? html`
-          <div class="sensor humidity">
-            <ha-icon icon="mdi:water-percent"></ha-icon>
-            <span>${humidity.toFixed(0)}%</span>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
+    const hasActiveDevice = this.currentDeviceIndex !== -1;
+    const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
+    const deviceEntity = currentDevice ? this.hass.states[currentDevice.entity] : null;
+    const isDeviceOn = deviceEntity && (deviceEntity.state === "on" || deviceEntity.state === "playing");
 
-  private _renderDevices(): TemplateResult {
-    return html`
-      <div class="devices-container">
-        ${this._roomData!.devices.map(device => this._renderDevice(device))}
-      </div>
-    `;
-  }
-
-  private _renderDevice(device: ProcessedDevice): TemplateResult {
-    const icon = device.icon || this._getDefaultIcon(device.type);
-    const name = device.name || this._getEntityName(device.entity);
+    // Calculate positions
+    const centerX = 75;
+    const centerY = 75;
+    const radius = 56;
     
+    // Calculate thumb position
+    const thumbAngle = this.valueToAngle(this.sliderValue);
+    const thumbAngleRad = this.degreesToRadians(thumbAngle);
+    const thumbX = centerX + radius * Math.cos(thumbAngleRad);
+    const thumbY = centerY + radius * Math.sin(thumbAngleRad);
+    
+    // Calculate arc endpoints
+    const startAngleRad = this.degreesToRadians(this.startAngle);
+    const endAngleRad = this.degreesToRadians(this.endAngle);
+    const startX = centerX + radius * Math.cos(startAngleRad);
+    const startY = centerY + radius * Math.sin(startAngleRad);
+    const endX = centerX + radius * Math.cos(endAngleRad);
+    const endY = centerY + radius * Math.sin(endAngleRad);
+    
+    // Calculate the current angle for the progress arc
+    const progressAngle = this.sliderValue * this.totalAngle;
+    const largeArcFlag = progressAngle > 180 ? 1 : 0;
+
     return html`
-      <div 
-        class="device ${device.is_on ? 'on' : 'off'} ${!device.available ? 'unavailable' : ''}"
-        @action=${(ev: ActionHandlerEvent) => this._handleAction(ev, device)}
-        .actionHandler=${actionHandler({
-          hasHold: hasAction(device.hold_action),
-          hasDoubleClick: hasAction(device.double_tap_action)
-        })}
-      >
-        <div class="device-icon">
-          <ha-icon icon="${icon}"></ha-icon>
+      <div class="card-container" style="background-color: ${backgroundColor}">
+        <div class="title-section">
+          <div class="room-name">${roomName}</div>
+          <div class="temp-humidity">${tempHumidity}</div>
         </div>
-        
-        <div class="device-name">${name}</div>
-        
-        ${device.control_type === 'continuous' ? html`
-          <div class="device-slider">
-            <input
-              type="range"
-              min="${device.min_value || 0}"
-              max="${device.max_value || 100}"
-              step="${device.step || 1}"
-              .value="${device.current_value}"
-              ?disabled="${!device.available}"
-              @change=${(e: Event) => this._handleDeviceControl(device, (e.target as HTMLInputElement).value)}
-            />
+
+        <div class="icon-section">
+          <div class="icon-container" @click=${this.handleIconClick}>
+            <div class="icon-background">
+              <ha-icon icon="${this._config.icon || 'mdi:home'}"></ha-icon>
+            </div>
+            
+            ${isDeviceOn && hasActiveDevice && currentDevice ? html`
+            <div class="slider-container">
+              <svg class="slider-svg" width="150" height="150" viewBox="0 0 150 150"
+                @pointerdown=${this.handlePointerDown}
+                @pointermove=${this.handlePointerMove}
+                @pointerup=${this.handlePointerUp}
+                @pointercancel=${this.handlePointerUp}>
+                <!-- Track arc -->
+                <path
+                  class="slider-track"
+                  d="M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}"
+                />
+                <!-- Progress arc -->
+                <path
+                  class="slider-progress"
+                  style="stroke: ${currentDevice.color || '#2196F3'}"
+                  d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
+                />
+                <!-- Thumb -->
+                <circle
+                  class="slider-thumb ${this.isDragging ? 'dragging' : ''}"
+                  style="fill: ${currentDevice.color || '#2196F3'}"
+                  cx="${thumbX}"
+                  cy="${thumbY}"
+                  r="16"
+                />
+                <!-- Icon on thumb -->
+                <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
+                  <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
+                    <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: white;"></ha-icon>
+                  </div>
+                </foreignObject>
+              </svg>
+            </div>
+            ` : ''}
           </div>
-        ` : html`
-          <div class="device-modes">
-            ${device.modes?.map((mode, index) => html`
-              <button
-                class="mode-button ${device.current_value === index / (device.modes!.length - 1) ? 'active' : ''}"
-                ?disabled="${!device.available}"
-                @click=${() => this._handleDeviceControl(device, index / (device.modes!.length - 1))}
+        </div>
+
+        <div class="chips-section">
+          ${this.devices.map((device, index) => {
+            const entity = this.hass.states[device.entity];
+            const isOn = entity && (entity.state === "on" || entity.state === "playing");
+            const chipColor = this.getChipColor(device.entity);
+            
+            return html`
+              <div
+                class="chip ${!entity ? 'unavailable' : ''}"
+                style="background-color: ${chipColor}; color: ${isOn ? 'white' : '#DBDBDB'}"
+                @click=${() => this.handleChipClick(index)}
               >
-                ${mode}
-              </button>
-            `)}
-          </div>
-        `}
-        
-        <button
-          class="device-toggle"
-          ?disabled="${!device.available}"
-          @click=${() => this._handleDeviceToggle(device)}
-        >
-          <ha-icon icon="${device.is_on ? 'mdi:power' : 'mdi:power-off'}"></ha-icon>
-        </button>
+                <ha-icon icon="${device.icon}"></ha-icon>
+              </div>
+            `;
+          })}
+        </div>
       </div>
     `;
   }
 
-  private _getDefaultIcon(type: string): string {
-    const icons: Record<string, string> = {
-      light: 'mdi:lightbulb',
-      speaker: 'mdi:speaker',
-      purifier: 'mdi:air-purifier',
-      fan: 'mdi:fan',
-      climate: 'mdi:thermostat',
-      switch: 'mdi:toggle-switch',
-      cover: 'mdi:window-shutter',
-      vacuum: 'mdi:robot-vacuum'
-    };
-    return icons[type] || 'mdi:device-unknown';
+  disconnectedCallback(): void {
+    if (this._handleMove) {
+      document.removeEventListener('pointermove', this._handleMove);
+    }
+    if (this._handleUp) {
+      document.removeEventListener('pointerup', this._handleUp);
+      document.removeEventListener('pointercancel', this._handleUp);
+    }
+    super.disconnectedCallback();
   }
 
-  private _getEntityName(entityId: string): string {
-    const entity = this.hass.states[entityId];
-    return entity?.attributes?.friendly_name || entityId.split('.')[1] || 'Unknown';
+  public getCardSize(): number {
+    return 2;
   }
 
   static get styles(): CSSResult {
     return css`
       :host {
         display: block;
+        height: 182px;
       }
 
-      ha-card {
-        border-radius: 16px;
+      .card-container {
+        height: 100%;
+        border-radius: 22px;
+        display: grid;
+        grid-template-areas:
+          "title chips"
+          "icon chips";
+        grid-template-rows: min-content 1fr;
+        grid-template-columns: 1fr min-content;
+        position: relative;
         transition: background-color 0.3s ease;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .title-section {
+        grid-area: title;
+        font-size: 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        margin-left: 15px;
+        padding-top: 5px;
+      }
+
+      .room-name {
+        font-weight: 500;
+        color: #000000;
+        margin-top: 5px;
+      }
+
+      .temp-humidity {
+        font-size: 12px;
+        color: #353535;
+        font-weight: 400;
+      }
+
+      .icon-section {
+        grid-area: icon;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        position: relative;
+        padding-top: 37px;
         overflow: hidden;
       }
-      
-      .card-content {
-        padding: 16px;
+
+      .icon-container {
+        position: relative;
+        width: 110px;
+        height: 110px;
+        margin-left: -10px;
+        cursor: pointer;
       }
-      
-      .warning {
-        text-align: center;
-        padding: 16px;
-        color: var(--warning-color);
-      }
-      
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-      }
-      
-      .room-name {
-        margin: 0;
-        font-size: 1.5em;
-        font-weight: 500;
-        color: var(--primary-text-color);
-      }
-      
-      .sensors {
-        display: flex;
-        gap: 16px;
-      }
-      
-      .sensor {
+
+      .icon-background {
+        position: absolute;
+        width: 110px;
+        height: 110px;
+        border-radius: 50%;
         display: flex;
         align-items: center;
-        gap: 4px;
-        font-size: 0.9em;
-        color: var(--secondary-text-color);
+        justify-content: center;
+        transition: all 0.3s ease;
+        z-index: 1;
+        background-color: rgba(255, 255, 255, 0.2);
       }
-      
-      .sensor ha-icon {
-        --mdc-icon-size: 18px;
+
+      .icon-background ha-icon {
+        --mdc-icon-size: 75px;
+        color: white;
+        transition: all 0.3s ease;
       }
-      
-      .devices-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 16px;
+
+      .slider-container {
+        position: absolute;
+        width: 150px;
+        height: 150px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
       }
-      
-      .device {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        padding: 16px;
-        border-radius: 12px;
-        background: var(--card-background-color);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+      .slider-svg {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .slider-track {
+        fill: none;
+        stroke: rgb(187, 187, 187);
+        stroke-width: 12;
+        pointer-events: stroke;
+      }
+
+      .slider-progress {
+        fill: none;
+        stroke-width: 12;
+        stroke-linecap: round;
+        transition: d 0.3s ease;
+        pointer-events: stroke;
+      }
+
+      .slider-thumb {
         transition: all 0.2s ease;
         cursor: pointer;
+        pointer-events: auto;
+      }
+
+      .slider-thumb.dragging {
+        r: 20;
+      }
+
+      .slider-thumb-icon {
+        pointer-events: none;
+      }
+
+      .chips-section {
+        grid-area: chips;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-right: 8px;
+        margin-top: 8px;
+      }
+
+      .chip {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 40px;
+        width: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.3s ease;
         position: relative;
       }
-      
-      .device.unavailable {
+
+      .chip:active {
+        transform: scale(0.95);
+      }
+
+      .chip ha-icon {
+        --mdc-icon-size: 25px;
+      }
+
+      .unavailable {
         opacity: 0.5;
         cursor: not-allowed;
       }
-      
-      .device:not(.unavailable):hover {
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        transform: translateY(-2px);
-      }
-      
-      .device-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--primary-color);
-        color: var(--text-primary-color);
-        transition: all 0.2s ease;
-      }
-      
-      .device.off .device-icon {
-        background: var(--disabled-color, #9e9e9e);
-      }
-      
-      .device-icon ha-icon {
-        --mdc-icon-size: 24px;
-      }
-      
-      .device-name {
-        font-size: 0.9em;
-        font-weight: 500;
-        text-align: center;
-        color: var(--primary-text-color);
-      }
-      
-      .device-slider {
-        width: 100%;
-        padding: 8px 0;
-      }
-      
-      .device-slider input[type="range"] {
-        width: 100%;
-        height: 4px;
-        border-radius: 2px;
-        background: var(--divider-color);
-        outline: none;
-        -webkit-appearance: none;
-      }
-      
-      .device-slider input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: var(--primary-color);
-        cursor: pointer;
-      }
-      
-      .device-slider input[type="range"]::-moz-range-thumb {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: var(--primary-color);
-        cursor: pointer;
-        border: none;
-      }
-      
-      .device-slider input[type="range"]:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      
-      .device-modes {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        width: 100%;
-      }
-      
-      .mode-button {
-        padding: 6px 12px;
-        border: 1px solid var(--divider-color);
-        border-radius: 8px;
-        background: transparent;
-        color: var(--primary-text-color);
-        font-size: 0.8em;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-      }
-      
-      .mode-button:hover:not(:disabled) {
-        background: var(--primary-color);
-        color: var(--text-primary-color);
-        border-color: var(--primary-color);
-      }
-      
-      .mode-button.active {
-        background: var(--primary-color);
-        color: var(--text-primary-color);
-        border-color: var(--primary-color);
-      }
-      
-      .mode-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      
-      .device-toggle {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        border: none;
-        background: transparent;
-        color: var(--secondary-text-color);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-      }
-      
-      .device-toggle:hover:not(:disabled) {
-        background: var(--divider-color);
-      }
-      
-      .device-toggle ha-icon {
-        --mdc-icon-size: 20px;
-      }
-      
-      .device-toggle:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      
-      @media (max-width: 600px) {
-        .devices-container {
-          grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-        }
-        
-        .device {
-          padding: 12px 8px;
-        }
+
+      .unavailable:active {
+        transform: none;
       }
     `;
   }
@@ -664,6 +825,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
   static getStubConfig(): RoomCardConfig {
     return {
       type: 'custom:room-card',
+      area: 'Living Room',
       name: 'Living Room',
       temperature_sensor: '',
       humidity_sensor: '',
