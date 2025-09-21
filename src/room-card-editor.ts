@@ -89,6 +89,13 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   @state() private _deviceIconSearch: Record<number, string> = {};
   @state() private _iconFocused = false;
   @state() private _deviceIconFocused: Record<number, boolean> = {};
+  @state() private _expandedSections: Record<string, boolean> = {
+    basic: true,
+    appearance: false,
+    sensors: false,
+    devices: false
+  };
+  @state() private _expandedDevices: Record<number, boolean> = {};
 
   public setConfig(config: RoomCardConfig): void {
     this._config = { ...config };
@@ -96,21 +103,48 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config.background_type) {
       this._config.background_type = this._config.temperature_sensor ? 'temperature' : 'solid';
     }
+    // Initialize expanded state for existing devices
+    if (this._config.devices) {
+      this._config.devices.forEach((_, index) => {
+        this._expandedDevices[index] = this._expandedDevices[index] ?? false;
+      });
+    }
+  }
+
+  private _toggleSection(section: string): void {
+    this._expandedSections = {
+      ...this._expandedSections,
+      [section]: !this._expandedSections[section]
+    };
+  }
+
+  private _toggleDevice(index: number): void {
+    this._expandedDevices = {
+      ...this._expandedDevices,
+      [index]: !this._expandedDevices[index]
+    };
   }
 
   private _valueChanged(ev: any): void {
     if (!this._config || !this.hass) return;
 
     const target = ev.target;
-    let value = target.value;
+    const configPath = target?.configPath || ev.currentTarget?.configPath;
     
-    if (target.checked !== undefined) {
+    let value;
+    
+    // Handle different types of events
+    if (ev.detail?.value !== undefined) {
+      value = ev.detail.value;
+    } else if (target?.checked !== undefined) {
       value = target.checked;
+    } else if (target?.value !== undefined) {
+      value = target.value;
     }
     
-    if (target.configPath) {
+    if (configPath && value !== undefined) {
       const newConfig = { ...this._config };
-      this._setPath(newConfig, target.configPath, value);
+      this._setPath(newConfig, configPath, value);
       this._config = newConfig;
       fireEvent(this, 'config-changed', { config: this._config });
     }
@@ -134,6 +168,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     if (!this._config) return;
     
     const devices = [...(this._config.devices || [])];
+    const newIndex = devices.length;
     devices.push({
       entity: '',
       control_entity: '',
@@ -147,6 +182,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     });
     
     this._config = { ...this._config, devices };
+    this._expandedDevices[newIndex] = true; // Expand newly added device
     fireEvent(this, 'config-changed', { config: this._config });
   }
 
@@ -156,6 +192,18 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     const devices = [...this._config.devices];
     devices.splice(index, 1);
     
+    // Update expanded states
+    const newExpanded: Record<number, boolean> = {};
+    Object.keys(this._expandedDevices).forEach(key => {
+      const keyIndex = parseInt(key);
+      if (keyIndex < index) {
+        newExpanded[keyIndex] = this._expandedDevices[keyIndex];
+      } else if (keyIndex > index) {
+        newExpanded[keyIndex - 1] = this._expandedDevices[keyIndex];
+      }
+    });
+    this._expandedDevices = newExpanded;
+    
     this._config = { ...this._config, devices };
     fireEvent(this, 'config-changed', { config: this._config });
   }
@@ -163,19 +211,24 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   private _deviceValueChanged(ev: any, index: number): void {
     if (!this._config?.devices) return;
     
-    const target = ev.target;
-    const field = target.field;
-    let value = target.value;
+    const field = ev.target?.field || ev.currentTarget?.field;
+    let value;
     
-    if (target.checked !== undefined) {
-      value = target.checked;
+    if (ev.detail?.value !== undefined) {
+      value = ev.detail.value;
+    } else if (ev.target?.checked !== undefined) {
+      value = ev.target.checked;
+    } else if (ev.target?.value !== undefined) {
+      value = ev.target.value;
     }
     
-    const devices = [...this._config.devices];
-    devices[index] = { ...devices[index], [field]: value };
-    
-    this._config = { ...this._config, devices };
-    fireEvent(this, 'config-changed', { config: this._config });
+    if (field && value !== undefined) {
+      const devices = [...this._config.devices];
+      devices[index] = { ...devices[index], [field]: value };
+      
+      this._config = { ...this._config, devices };
+      fireEvent(this, 'config-changed', { config: this._config });
+    }
   }
 
   private _getAreas(): string[] {
@@ -223,200 +276,513 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     );
   }
 
-  private _renderBackgroundConfig(): TemplateResult {
-    const entities = Object.keys(this.hass.states).sort();
+  private _renderBasicSection(): TemplateResult {
+    const areas = this._getAreas();
     
     return html`
-      <ha-select
-        naturalMenuWidth
-        fixedMenuPosition
-        label="Background Type"
-        .configPath=${'background_type'}
-        .value=${this._config!.background_type || 'temperature'}
-        @selected=${this._valueChanged}
-        @closed=${(e: Event) => e.stopPropagation()}
+      <ha-expansion-panel
+        .header=${'Basic Configuration'}
+        .expanded=${this._expandedSections.basic}
+        @expanded-changed=${(e: any) => this._expandedSections.basic = e.detail.expanded}
       >
-        <ha-list-item value="temperature">Temperature-based</ha-list-item>
-        <ha-list-item value="solid">Solid Color</ha-list-item>
-        <ha-list-item value="entity">Entity State</ha-list-item>
-      </ha-select>
+        <div class="section-content">
+          <ha-combo-box
+            label="Area (Required)"
+            .value=${this._config!.area || ''}
+            .configPath=${'area'}
+            .items=${areas.map(area => ({ value: area, label: area }))}
+            item-value-path="value"
+            item-label-path="label"
+            @value-changed=${this._valueChanged}
+            allow-custom-value
+          ></ha-combo-box>
 
-      ${this._config!.background_type === 'solid' ? html`
-        <ha-textfield
-          label="Background Color"
-          .value=${this._config!.background_color || '#353535'}
-          .configPath=${'background_color'}
-          @input=${this._valueChanged}
-          helper="Hex color code (e.g., #353535)"
-        ></ha-textfield>
-      ` : ''}
-
-      ${this._config!.background_type === 'entity' ? html`
-        <ha-entity-picker
-          .hass=${this.hass}
-          .value=${this._config!.background_entity || ''}
-          .configPath=${'background_entity'}
-          @value-changed=${(e: any) => {
-            this._valueChanged({ target: { configPath: 'background_entity', value: e.detail.value }});
-          }}
-          allow-custom-entity
-          label="Background Entity"
-        ></ha-entity-picker>
-        
-        <div class="state-colors">
-          <label>State Colors (JSON format)</label>
           <ha-textfield
-            label="State to Color Mapping"
-            .value=${JSON.stringify(this._config!.background_state_colors || { "on": "#FDD835", "off": "#353535" })}
-            @input=${(e: any) => {
-              try {
-                const colors = JSON.parse(e.target.value);
-                this._valueChanged({ target: { configPath: 'background_state_colors', value: colors }});
-              } catch (err) {
-                // Invalid JSON, ignore
-              }
-            }}
-            helper='{"on": "#FDD835", "off": "#353535", "home": "#4CAF50"}'
+            label="Display Name (Optional)"
+            .value=${this._config!.name || ''}
+            .configPath=${'name'}
+            @input=${this._valueChanged}
+            helper="Leave empty to use the area name"
           ></ha-textfield>
+
+          <ha-formfield label="Haptic Feedback">
+            <ha-switch
+              .checked=${this._config!.haptic_feedback !== false}
+              .configPath=${'haptic_feedback'}
+              @change=${this._valueChanged}
+            ></ha-switch>
+          </ha-formfield>
         </div>
-      ` : ''}
+      </ha-expansion-panel>
     `;
   }
 
-  private _renderIconConfig(): TemplateResult {
+  private _renderAppearanceSection(): TemplateResult {
     const filteredIcons = this._getFilteredIcons(this._iconSearch);
     
     return html`
-      <div class="icon-picker">
-        <ha-textfield
-          label="Icon"
-          .value=${this._config!.icon || ''}
-          .configPath=${'icon'}
-          @input=${(e: any) => {
-            this._iconSearch = e.target.value;
-            this._valueChanged(e);
-          }}
-          @focus=${() => {
-            this._iconFocused = true;
-            this._iconSearch = this._config!.icon || '';
-          }}
-          @blur=${() => {
-            setTimeout(() => {
-              this._iconFocused = false;
-              this._iconSearch = '';
-            }, 200);
-          }}
-          helper="MDI icon name (e.g., mdi:home)"
-        ></ha-textfield>
-        
-        ${this._iconFocused && filteredIcons.length > 0 ? html`
-          <div class="icon-suggestions">
-            ${filteredIcons.slice(0, 8).map(icon => html`
-              <div class="icon-suggestion" @click=${() => {
-                this._config = { ...this._config!, icon };
-                this._iconSearch = '';
-                this._iconFocused = false;
-                fireEvent(this, 'config-changed', { config: this._config });
-              }}>
-                <ha-icon icon="${icon}"></ha-icon>
-                <span>${icon}</span>
+      <ha-expansion-panel
+        .header=${'Appearance'}
+        .expanded=${this._expandedSections.appearance}
+        @expanded-changed=${(e: any) => this._expandedSections.appearance = e.detail.expanded}
+      >
+        <div class="section-content">
+          <div class="icon-picker">
+            <ha-textfield
+              label="Icon"
+              .value=${this._config!.icon || ''}
+              .configPath=${'icon'}
+              @input=${(e: any) => {
+                this._iconSearch = e.target.value;
+                this._valueChanged(e);
+              }}
+              @focus=${() => {
+                this._iconFocused = true;
+                this._iconSearch = this._config!.icon || '';
+              }}
+              @blur=${() => {
+                setTimeout(() => {
+                  this._iconFocused = false;
+                  this._iconSearch = '';
+                }, 200);
+              }}
+              helper="MDI icon name (e.g., mdi:home)"
+            ></ha-textfield>
+            
+            ${this._iconFocused && filteredIcons.length > 0 ? html`
+              <div class="icon-suggestions">
+                ${filteredIcons.slice(0, 8).map(icon => html`
+                  <div class="icon-suggestion" @click=${() => {
+                    this._config = { ...this._config!, icon };
+                    this._iconSearch = '';
+                    this._iconFocused = false;
+                    fireEvent(this, 'config-changed', { config: this._config });
+                  }}>
+                    <ha-icon icon="${icon}"></ha-icon>
+                    <span>${icon}</span>
+                  </div>
+                `)}
               </div>
-            `)}
+            ` : ''}
           </div>
-        ` : ''}
-      </div>
 
-      <ha-select
-        naturalMenuWidth
-        fixedMenuPosition
-        label="Icon Color Type"
-        .value=${typeof this._config!.icon_color === 'object' ? 'entity' : 'solid'}
-        @selected=${(e: any) => {
-          if (e.target.value === 'solid') {
-            this._config = { ...this._config!, icon_color: '#FFFFFF' };
-          } else {
-            this._config = { ...this._config!, icon_color: { entity: '' } };
-          }
-          fireEvent(this, 'config-changed', { config: this._config });
-        }}
-        @closed=${(e: Event) => e.stopPropagation()}
-      >
-        <ha-list-item value="solid">Solid Color</ha-list-item>
-        <ha-list-item value="entity">Entity-based</ha-list-item>
-      </ha-select>
-
-      ${typeof this._config!.icon_color === 'string' ? html`
-        <ha-textfield
-          label="Icon Color"
-          .value=${this._config!.icon_color || '#FFFFFF'}
-          .configPath=${'icon_color'}
-          @input=${this._valueChanged}
-          helper="Hex color code"
-        ></ha-textfield>
-      ` : html`
-        <ha-entity-picker
-          .hass=${this.hass}
-          .value=${(this._config!.icon_color as any)?.entity || ''}
-          @value-changed=${(e: any) => {
-            this._config = { 
-              ...this._config!, 
-              icon_color: { 
-                ...(typeof this._config!.icon_color === 'object' ? this._config!.icon_color : {}),
-                entity: e.detail.value 
+          <ha-select
+            naturalMenuWidth
+            fixedMenuPosition
+            label="Icon Color Type"
+            .value=${typeof this._config!.icon_color === 'object' ? 'entity' : 'solid'}
+            @selected=${(e: any) => {
+              if (e.target.value === 'solid') {
+                this._config = { ...this._config!, icon_color: '#FFFFFF' };
+              } else {
+                this._config = { ...this._config!, icon_color: { entity: '' } };
               }
-            };
-            fireEvent(this, 'config-changed', { config: this._config });
-          }}
-          allow-custom-entity
-          label="Icon Color Entity"
-        ></ha-entity-picker>
-      `}
+              fireEvent(this, 'config-changed', { config: this._config });
+            }}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="solid">Solid Color</ha-list-item>
+            <ha-list-item value="entity">Entity-based</ha-list-item>
+          </ha-select>
 
-      <ha-select
-        naturalMenuWidth
-        fixedMenuPosition
-        label="Icon Background Type"
-        .value=${typeof this._config!.icon_background_color === 'object' ? 'entity' : 'solid'}
-        @selected=${(e: any) => {
-          if (e.target.value === 'solid') {
-            this._config = { ...this._config!, icon_background_color: 'rgba(255, 255, 255, 0.2)' };
-          } else {
-            this._config = { ...this._config!, icon_background_color: { entity: '' } };
-          }
-          fireEvent(this, 'config-changed', { config: this._config });
-        }}
-        @closed=${(e: Event) => e.stopPropagation()}
-      >
-        <ha-list-item value="solid">Solid Color</ha-list-item>
-        <ha-list-item value="entity">Entity-based</ha-list-item>
-      </ha-select>
+          ${typeof this._config!.icon_color === 'string' ? html`
+            <ha-textfield
+              label="Icon Color"
+              .value=${this._config!.icon_color || '#FFFFFF'}
+              .configPath=${'icon_color'}
+              @input=${this._valueChanged}
+              helper="Hex color code"
+            ></ha-textfield>
+          ` : html`
+            <ha-entity-picker
+              .hass=${this.hass}
+              .value=${(this._config!.icon_color as any)?.entity || ''}
+              .configPath=${'icon_color.entity'}
+              @value-changed=${this._valueChanged}
+              allow-custom-entity
+              label="Icon Color Entity"
+            ></ha-entity-picker>
+          `}
 
-      ${typeof this._config!.icon_background_color === 'string' ? html`
-        <ha-textfield
-          label="Icon Background Color"
-          .value=${this._config!.icon_background_color || 'rgba(255, 255, 255, 0.2)'}
-          .configPath=${'icon_background_color'}
-          @input=${this._valueChanged}
-          helper="Hex or rgba color"
-        ></ha-textfield>
-      ` : html`
-        <ha-entity-picker
-          .hass=${this.hass}
-          .value=${(this._config!.icon_background_color as any)?.entity || ''}
-          @value-changed=${(e: any) => {
-            this._config = { 
-              ...this._config!, 
-              icon_background_color: { 
-                ...(typeof this._config!.icon_background_color === 'object' ? this._config!.icon_background_color : {}),
-                entity: e.detail.value 
+          <ha-select
+            naturalMenuWidth
+            fixedMenuPosition
+            label="Icon Background Type"
+            .value=${typeof this._config!.icon_background_color === 'object' ? 'entity' : 'solid'}
+            @selected=${(e: any) => {
+              if (e.target.value === 'solid') {
+                this._config = { ...this._config!, icon_background_color: 'rgba(255, 255, 255, 0.2)' };
+              } else {
+                this._config = { ...this._config!, icon_background_color: { entity: '' } };
               }
-            };
-            fireEvent(this, 'config-changed', { config: this._config });
-          }}
-          allow-custom-entity
-          label="Icon Background Entity"
-        ></ha-entity-picker>
-      `}
+              fireEvent(this, 'config-changed', { config: this._config });
+            }}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="solid">Solid Color</ha-list-item>
+            <ha-list-item value="entity">Entity-based</ha-list-item>
+          </ha-select>
+
+          ${typeof this._config!.icon_background_color === 'string' ? html`
+            <ha-textfield
+              label="Icon Background Color"
+              .value=${this._config!.icon_background_color || 'rgba(255, 255, 255, 0.2)'}
+              .configPath=${'icon_background_color'}
+              @input=${this._valueChanged}
+              helper="Hex or rgba color"
+            ></ha-textfield>
+          ` : html`
+            <ha-entity-picker
+              .hass=${this.hass}
+              .value=${(this._config!.icon_background_color as any)?.entity || ''}
+              .configPath=${'icon_background_color.entity'}
+              @value-changed=${this._valueChanged}
+              allow-custom-entity
+              label="Icon Background Entity"
+            ></ha-entity-picker>
+          `}
+
+          <ha-select
+            naturalMenuWidth
+            fixedMenuPosition
+            label="Background Type"
+            .configPath=${'background_type'}
+            .value=${this._config!.background_type || 'temperature'}
+            @selected=${this._valueChanged}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="temperature">Temperature-based</ha-list-item>
+            <ha-list-item value="solid">Solid Color</ha-list-item>
+            <ha-list-item value="entity">Entity State</ha-list-item>
+          </ha-select>
+
+          ${this._config!.background_type === 'solid' ? html`
+            <ha-textfield
+              label="Background Color"
+              .value=${this._config!.background_color || '#353535'}
+              .configPath=${'background_color'}
+              @input=${this._valueChanged}
+              helper="Hex color code (e.g., #353535)"
+            ></ha-textfield>
+          ` : ''}
+
+          ${this._config!.background_type === 'entity' ? html`
+            <ha-entity-picker
+              .hass=${this.hass}
+              .value=${this._config!.background_entity || ''}
+              .configPath=${'background_entity'}
+              @value-changed=${this._valueChanged}
+              allow-custom-entity
+              label="Background Entity"
+            ></ha-entity-picker>
+            
+            <div class="state-colors">
+              <label>State Colors (JSON format)</label>
+              <ha-textfield
+                label="State to Color Mapping"
+                .value=${JSON.stringify(this._config!.background_state_colors || { "on": "#FDD835", "off": "#353535" })}
+                @input=${(e: any) => {
+                  try {
+                    const colors = JSON.parse(e.target.value);
+                    this._valueChanged({ target: { configPath: 'background_state_colors', value: colors }});
+                  } catch (err) {
+                    // Invalid JSON, ignore
+                  }
+                }}
+                helper='{"on": "#FDD835", "off": "#353535", "home": "#4CAF50"}'
+              ></ha-textfield>
+            </div>
+          ` : ''}
+        </div>
+      </ha-expansion-panel>
+    `;
+  }
+
+  private _renderSensorsSection(): TemplateResult {
+    const entities = Object.keys(this.hass.states).sort();
+    const temperatureSensors = entities.filter(e => 
+      e.includes('temperature') || 
+      e.includes('temp') || 
+      this.hass.states[e].attributes.device_class === 'temperature'
+    );
+    const humiditySensors = entities.filter(e => 
+      e.includes('humidity') || 
+      this.hass.states[e].attributes.device_class === 'humidity'
+    );
+
+    return html`
+      <ha-expansion-panel
+        .header=${'Sensors'}
+        .expanded=${this._expandedSections.sensors}
+        @expanded-changed=${(e: any) => this._expandedSections.sensors = e.detail.expanded}
+      >
+        <div class="section-content">
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._config!.temperature_sensor || ''}
+            .configPath=${'temperature_sensor'}
+            @value-changed=${this._valueChanged}
+            .includeDomains=${['sensor']}
+            .includeDeviceClasses=${['temperature']}
+            allow-custom-entity
+            label="Temperature Sensor"
+          ></ha-entity-picker>
+
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._config!.humidity_sensor || ''}
+            .configPath=${'humidity_sensor'}
+            @value-changed=${this._valueChanged}
+            .includeDomains=${['sensor']}
+            .includeDeviceClasses=${['humidity']}
+            allow-custom-entity
+            label="Humidity Sensor"
+          ></ha-entity-picker>
+
+          <ha-formfield label="Show Temperature">
+            <ha-switch
+              .checked=${this._config!.show_temperature !== false}
+              .configPath=${'show_temperature'}
+              @change=${this._valueChanged}
+            ></ha-switch>
+          </ha-formfield>
+
+          <ha-formfield label="Show Humidity">
+            <ha-switch
+              .checked=${this._config!.show_humidity !== false}
+              .configPath=${'show_humidity'}
+              @change=${this._valueChanged}
+            ></ha-switch>
+          </ha-formfield>
+
+          <ha-select
+            naturalMenuWidth
+            fixedMenuPosition
+            label="Temperature Unit"
+            .configPath=${'temperature_unit'}
+            .value=${this._config!.temperature_unit || 'F'}
+            @selected=${this._valueChanged}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="F">Fahrenheit</ha-list-item>
+            <ha-list-item value="C">Celsius</ha-list-item>
+          </ha-select>
+        </div>
+      </ha-expansion-panel>
+    `;
+  }
+
+  private _renderDevicesSection(): TemplateResult {
+    return html`
+      <ha-expansion-panel
+        .header=${'Devices'}
+        .expanded=${this._expandedSections.devices}
+        @expanded-changed=${(e: any) => this._expandedSections.devices = e.detail.expanded}
+      >
+        <div class="section-content">
+          <div class="devices-header">
+            <h3>Device Configuration</h3>
+            <ha-icon-button
+              .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
+              @click=${this._addDevice}
+            ></ha-icon-button>
+          </div>
+
+          ${this._config!.devices?.map((device, index) => {
+            const entityAttrs = this._getEntityAttributes(device.entity);
+            
+            return html`
+              <ha-expansion-panel
+                .header=${`Device ${index + 1}: ${device.entity || 'Not configured'}`}
+                .expanded=${this._expandedDevices[index] || false}
+                @expanded-changed=${(e: any) => this._expandedDevices[index] = e.detail.expanded}
+                .secondary=${html`
+                  <ha-icon-button
+                    .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
+                    @click=${(e: Event) => {
+                      e.stopPropagation();
+                      this._removeDevice(index);
+                    }}
+                  ></ha-icon-button>
+                `}
+              >
+                <div class="device-content">
+                  <ha-entity-picker
+                    .hass=${this.hass}
+                    .value=${device.entity || ''}
+                    .field=${'entity'}
+                    @value-changed=${(e: any) => this._deviceValueChanged(e, index)}
+                    allow-custom-entity
+                    label="Display Entity"
+                  ></ha-entity-picker>
+
+                  <ha-entity-picker
+                    .hass=${this.hass}
+                    .value=${device.control_entity || ''}
+                    .field=${'control_entity'}
+                    @value-changed=${(e: any) => this._deviceValueChanged(e, index)}
+                    allow-custom-entity
+                    label="Control Entity (Optional)"
+                    helper="Leave empty to use display entity"
+                  ></ha-entity-picker>
+
+                  <ha-select
+                    naturalMenuWidth
+                    fixedMenuPosition
+                    label="Attribute"
+                    .value=${device.attribute || 'brightness'}
+                    .field=${'attribute'}
+                    @selected=${(e: any) => this._deviceValueChanged(e, index)}
+                    @closed=${(e: Event) => e.stopPropagation()}
+                  >
+                    ${entityAttrs.length > 0 ? entityAttrs.map(attr => html`
+                      <ha-list-item value=${attr}>${attr}</ha-list-item>
+                    `) : html`
+                      <ha-list-item value="brightness">brightness</ha-list-item>
+                      <ha-list-item value="volume_level">volume_level</ha-list-item>
+                      <ha-list-item value="percentage">percentage</ha-list-item>
+                    `}
+                  </ha-select>
+
+                  <div class="icon-picker">
+                    <ha-textfield
+                      label="Icon"
+                      .value=${device.icon || ''}
+                      .field=${'icon'}
+                      @input=${(e: any) => {
+                        this._deviceIconSearch = { ...this._deviceIconSearch, [index]: e.target.value };
+                        this._deviceValueChanged(e, index);
+                      }}
+                      @focus=${() => {
+                        this._deviceIconFocused = { ...this._deviceIconFocused, [index]: true };
+                        if (!this._deviceIconSearch[index]) {
+                          this._deviceIconSearch = { ...this._deviceIconSearch, [index]: device.icon || '' };
+                        }
+                      }}
+                      @blur=${() => {
+                        setTimeout(() => {
+                          this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
+                        }, 200);
+                      }}
+                      helper="MDI icon name"
+                    ></ha-textfield>
+                    
+                    ${this._deviceIconFocused[index] ? html`
+                      <div class="icon-suggestions">
+                        ${this._getFilteredIcons(this._deviceIconSearch[index] || device.icon || '').slice(0, 8).map(icon => html`
+                          <div class="icon-suggestion" @click=${() => {
+                            const devices = [...this._config!.devices!];
+                            devices[index] = { ...devices[index], icon };
+                            this._config = { ...this._config!, devices };
+                            this._deviceIconSearch = { ...this._deviceIconSearch, [index]: '' };
+                            this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
+                            fireEvent(this, 'config-changed', { config: this._config });
+                          }}>
+                            <ha-icon icon="${icon}"></ha-icon>
+                            <span>${icon}</span>
+                          </div>
+                        `)}
+                      </div>
+                    ` : ''}
+                  </div>
+
+                  <ha-select
+                    naturalMenuWidth
+                    fixedMenuPosition
+                    label="Color"
+                    .value=${device.color === 'light-color' ? 'light-color' : 'custom'}
+                    @selected=${(e: any) => {
+                      const value = e.target.value === 'light-color' ? 'light-color' : '#FDD835';
+                      this._deviceValueChanged({ target: { field: 'color', value }}, index);
+                    }}
+                    @closed=${(e: Event) => e.stopPropagation()}
+                  >
+                    <ha-list-item value="custom">Custom Color</ha-list-item>
+                    ${device.entity && device.entity.startsWith('light.') ? html`
+                      <ha-list-item value="light-color">Use Light Color</ha-list-item>
+                    ` : ''}
+                  </ha-select>
+
+                  ${device.color !== 'light-color' ? html`
+                    <ha-textfield
+                      label="Custom Color"
+                      .value=${typeof device.color === 'string' ? device.color : '#FDD835'}
+                      .field=${'color'}
+                      @input=${(e: any) => this._deviceValueChanged(e, index)}
+                      helper="Hex color code (e.g., #FDD835)"
+                    ></ha-textfield>
+                  ` : ''}
+
+                  <ha-textfield
+                    label="Scale"
+                    type="number"
+                    .value=${device.scale || 100}
+                    .field=${'scale'}
+                    @input=${(e: any) => this._deviceValueChanged(e, index)}
+                    helper="Maximum value (255 for brightness, 1 for volume, 100 for percentage)"
+                  ></ha-textfield>
+
+                  <ha-select
+                    naturalMenuWidth
+                    fixedMenuPosition
+                    label="Control Type"
+                    .value=${device.type || 'continuous'}
+                    .field=${'type'}
+                    @selected=${(e: any) => this._deviceValueChanged(e, index)}
+                    @closed=${(e: Event) => e.stopPropagation()}
+                  >
+                    <ha-list-item value="continuous">Continuous (Slider)</ha-list-item>
+                    <ha-list-item value="discrete">Discrete (Modes)</ha-list-item>
+                  </ha-select>
+
+                  <div class="device-toggles">
+                    <ha-formfield label="Show Slider">
+                      <ha-switch
+                        .checked=${device.show_slider !== false}
+                        @change=${(e: any) => {
+                          this._deviceValueChanged({ 
+                            target: { field: 'show_slider', checked: e.target.checked }
+                          }, index);
+                        }}
+                      ></ha-switch>
+                    </ha-formfield>
+
+                    <ha-formfield label="Show Chip">
+                      <ha-switch
+                        .checked=${device.show_chip !== false}
+                        @change=${(e: any) => {
+                          this._deviceValueChanged({ 
+                            target: { field: 'show_chip', checked: e.target.checked }
+                          }, index);
+                        }}
+                      ></ha-switch>
+                    </ha-formfield>
+                  </div>
+
+                  ${device.type === 'discrete' ? html`
+                    <div class="modes-section">
+                      <label>Discrete Modes (JSON format)</label>
+                      <ha-textfield
+                        label="Modes JSON"
+                        .value=${JSON.stringify(device.modes || [])}
+                        @input=${(e: any) => {
+                          try {
+                            const modes = JSON.parse(e.target.value);
+                            this._deviceValueChanged({ target: { field: 'modes', value: modes }}, index);
+                          } catch (err) {
+                            // Invalid JSON, ignore
+                          }
+                        }}
+                        helper='[{"value":0,"label":"Off","percentage":0},{"value":0.5,"label":"Medium","percentage":50}]'
+                      ></ha-textfield>
+                    </div>
+                  ` : ''}
+                </div>
+              </ha-expansion-panel>
+            `;
+          }) || ''}
+        </div>
+      </ha-expansion-panel>
     `;
   }
 
@@ -425,315 +791,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       return html`<div class="error">Unable to load editor</div>`;
     }
 
-    const entities = Object.keys(this.hass.states).sort();
-    const areas = this._getAreas();
-    
-    const temperatureSensors = entities.filter(e => 
-      e.includes('temperature') || 
-      e.includes('temp') || 
-      this.hass.states[e].attributes.device_class === 'temperature'
-    );
-    
-    const humiditySensors = entities.filter(e => 
-      e.includes('humidity') || 
-      this.hass.states[e].attributes.device_class === 'humidity'
-    );
-
     return html`
       <div class="card-config">
-        <ha-combo-box
-          label="Area (Required)"
-          .value=${this._config.area || ''}
-          .configPath=${'area'}
-          .items=${areas.map(area => ({ value: area, label: area }))}
-          item-value-path="value"
-          item-label-path="label"
-          @value-changed=${this._valueChanged}
-          allow-custom-value
-        ></ha-combo-box>
-
-        <ha-textfield
-          label="Display Name (Optional)"
-          .value=${this._config.name || ''}
-          .configPath=${'name'}
-          @input=${this._valueChanged}
-          helper="Leave empty to use the area name"
-        ></ha-textfield>
-
-        ${this._renderIconConfig()}
-        ${this._renderBackgroundConfig()}
-
-        <ha-select
-          naturalMenuWidth
-          fixedMenuPosition
-          label="Temperature Sensor"
-          .configPath=${'temperature_sensor'}
-          .value=${this._config.temperature_sensor || ''}
-          @selected=${this._valueChanged}
-          @closed=${(e: Event) => e.stopPropagation()}
-        >
-          <ha-list-item value="">None</ha-list-item>
-          ${temperatureSensors.map(entity => html`
-            <ha-list-item value=${entity}>
-              ${this.hass.states[entity].attributes.friendly_name || entity}
-            </ha-list-item>
-          `)}
-        </ha-select>
-
-        <ha-select
-          naturalMenuWidth
-          fixedMenuPosition
-          label="Humidity Sensor"
-          .configPath=${'humidity_sensor'}
-          .value=${this._config.humidity_sensor || ''}
-          @selected=${this._valueChanged}
-          @closed=${(e: Event) => e.stopPropagation()}
-        >
-          <ha-list-item value="">None</ha-list-item>
-          ${humiditySensors.map(entity => html`
-            <ha-list-item value=${entity}>
-              ${this.hass.states[entity].attributes.friendly_name || entity}
-            </ha-list-item>
-          `)}
-        </ha-select>
-
-        <div class="switches">
-          <ha-formfield label="Show Temperature">
-            <ha-switch
-              .checked=${this._config.show_temperature !== false}
-              .configPath=${'show_temperature'}
-              @change=${this._valueChanged}
-            ></ha-switch>
-          </ha-formfield>
-
-          <ha-formfield label="Show Humidity">
-            <ha-switch
-              .checked=${this._config.show_humidity !== false}
-              .configPath=${'show_humidity'}
-              @change=${this._valueChanged}
-            ></ha-switch>
-          </ha-formfield>
-
-          <ha-formfield label="Haptic Feedback">
-            <ha-switch
-              .checked=${this._config.haptic_feedback !== false}
-              .configPath=${'haptic_feedback'}
-              @change=${this._valueChanged}
-            ></ha-switch>
-          </ha-formfield>
-        </div>
-
-        <ha-select
-          naturalMenuWidth
-          fixedMenuPosition
-          label="Temperature Unit"
-          .configPath=${'temperature_unit'}
-          .value=${this._config.temperature_unit || 'F'}
-          @selected=${this._valueChanged}
-          @closed=${(e: Event) => e.stopPropagation()}
-        >
-          <ha-list-item value="F">Fahrenheit</ha-list-item>
-          <ha-list-item value="C">Celsius</ha-list-item>
-        </ha-select>
-
-        <div class="devices-header">
-          <h3>Devices</h3>
-          <ha-icon-button
-            .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
-            @click=${this._addDevice}
-          ></ha-icon-button>
-        </div>
-
-        ${this._config.devices?.map((device, index) => {
-          const filteredDeviceIcons = this._getFilteredIcons(this._deviceIconSearch[index] || device.icon || '');
-          const entityAttrs = this._getEntityAttributes(device.entity);
-          
-          return html`
-          <div class="device-config">
-            <div class="device-header">
-              <span>Device ${index + 1}</span>
-              <ha-icon-button
-                .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
-                @click=${() => this._removeDevice(index)}
-              ></ha-icon-button>
-            </div>
-
-            <ha-entity-picker
-              .hass=${this.hass}
-              .value=${device.entity}
-              .field=${'entity'}
-              @value-changed=${(e: any) => {
-                this._deviceValueChanged({ target: { field: 'entity', value: e.detail.value }}, index);
-              }}
-              allow-custom-entity
-              label="Display Entity"
-            ></ha-entity-picker>
-
-            <ha-entity-picker
-              .hass=${this.hass}
-              .value=${device.control_entity || ''}
-              .field=${'control_entity'}
-              @value-changed=${(e: any) => {
-                this._deviceValueChanged({ target: { field: 'control_entity', value: e.detail.value }}, index);
-              }}
-              allow-custom-entity
-              label="Control Entity (Optional)"
-              helper="Leave empty to use display entity"
-            ></ha-entity-picker>
-
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Attribute"
-              .value=${device.attribute || 'brightness'}
-              .field=${'attribute'}
-              @selected=${(e: any) => this._deviceValueChanged(e, index)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              ${entityAttrs.length > 0 ? entityAttrs.map(attr => html`
-                <ha-list-item value=${attr}>${attr}</ha-list-item>
-              `) : html`
-                <ha-list-item value="brightness">brightness</ha-list-item>
-                <ha-list-item value="volume_level">volume_level</ha-list-item>
-                <ha-list-item value="percentage">percentage</ha-list-item>
-              `}
-            </ha-select>
-
-            <div class="icon-picker">
-              <ha-textfield
-                label="Icon"
-                .value=${device.icon || ''}
-                .field=${'icon'}
-                @input=${(e: any) => {
-                  this._deviceIconSearch = { ...this._deviceIconSearch, [index]: e.target.value };
-                  this._deviceValueChanged(e, index);
-                }}
-                @focus=${() => {
-                  this._deviceIconFocused = { ...this._deviceIconFocused, [index]: true };
-                  if (!this._deviceIconSearch[index]) {
-                    this._deviceIconSearch = { ...this._deviceIconSearch, [index]: device.icon || '' };
-                  }
-                }}
-                @blur=${() => {
-                  setTimeout(() => {
-                    this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
-                  }, 200);
-                }}
-                helper="MDI icon name"
-              ></ha-textfield>
-              
-              ${this._deviceIconFocused[index] ? html`
-                <div class="icon-suggestions">
-                  ${this._getFilteredIcons(this._deviceIconSearch[index] || device.icon || '').slice(0, 8).map(icon => html`
-                    <div class="icon-suggestion" @click=${() => {
-                      const devices = [...this._config!.devices!];
-                      devices[index] = { ...devices[index], icon };
-                      this._config = { ...this._config!, devices };
-                      this._deviceIconSearch = { ...this._deviceIconSearch, [index]: '' };
-                      this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
-                      fireEvent(this, 'config-changed', { config: this._config });
-                    }}>
-                      <ha-icon icon="${icon}"></ha-icon>
-                      <span>${icon}</span>
-                    </div>
-                  `)}
-                </div>
-              ` : ''}
-            </div>
-
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Color"
-              .value=${device.color === 'light-color' ? 'light-color' : 'custom'}
-              @selected=${(e: any) => {
-                const value = e.target.value === 'light-color' ? 'light-color' : '#FDD835';
-                this._deviceValueChanged({ target: { field: 'color', value }}, index);
-              }}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              <ha-list-item value="custom">Custom Color</ha-list-item>
-              ${device.entity && device.entity.startsWith('light.') ? html`
-                <ha-list-item value="light-color">Use Light Color</ha-list-item>
-              ` : ''}
-            </ha-select>
-
-            ${device.color !== 'light-color' ? html`
-              <ha-textfield
-                label="Custom Color"
-                .value=${typeof device.color === 'string' ? device.color : '#FDD835'}
-                .field=${'color'}
-                @input=${(e: any) => this._deviceValueChanged(e, index)}
-                helper="Hex color code (e.g., #FDD835)"
-              ></ha-textfield>
-            ` : ''}
-
-            <ha-textfield
-              label="Scale"
-              type="number"
-              .value=${device.scale || 100}
-              .field=${'scale'}
-              @input=${(e: any) => this._deviceValueChanged(e, index)}
-              helper="Maximum value (255 for brightness, 1 for volume, 100 for percentage)"
-            ></ha-textfield>
-
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Control Type"
-              .value=${device.type || 'continuous'}
-              .field=${'type'}
-              @selected=${(e: any) => this._deviceValueChanged(e, index)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              <ha-list-item value="continuous">Continuous (Slider)</ha-list-item>
-              <ha-list-item value="discrete">Discrete (Modes)</ha-list-item>
-            </ha-select>
-
-            <div class="device-toggles">
-              <ha-formfield label="Show Slider">
-                <ha-switch
-                  .checked=${device.show_slider !== false}
-                  @change=${(e: any) => {
-                    this._deviceValueChanged({ 
-                      target: { field: 'show_slider', checked: e.target.checked }
-                    }, index);
-                  }}
-                ></ha-switch>
-              </ha-formfield>
-
-              <ha-formfield label="Show Chip">
-                <ha-switch
-                  .checked=${device.show_chip !== false}
-                  @change=${(e: any) => {
-                    this._deviceValueChanged({ 
-                      target: { field: 'show_chip', checked: e.target.checked }
-                    }, index);
-                  }}
-                ></ha-switch>
-              </ha-formfield>
-            </div>
-
-            ${device.type === 'discrete' ? html`
-              <div class="modes-section">
-                <label>Discrete Modes (JSON format)</label>
-                <ha-textfield
-                  label="Modes JSON"
-                  .value=${JSON.stringify(device.modes || [])}
-                  @input=${(e: any) => {
-                    try {
-                      const modes = JSON.parse(e.target.value);
-                      this._deviceValueChanged({ target: { field: 'modes', value: modes }}, index);
-                    } catch (err) {
-                      // Invalid JSON, ignore
-                    }
-                  }}
-                  helper='[{"value":0,"label":"Off","percentage":0},{"value":0.5,"label":"Medium","percentage":50}]'
-                ></ha-textfield>
-              </div>
-            ` : ''}
-          </div>
-        `}) || ''}
+        ${this._renderBasicSection()}
+        ${this._renderAppearanceSection()}
+        ${this._renderSensorsSection()}
+        ${this._renderDevicesSection()}
       </div>
     `;
   }
@@ -743,8 +806,15 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       .card-config {
         display: flex;
         flex-direction: column;
+        gap: 8px;
+      }
+
+      .section-content,
+      .device-content {
+        display: flex;
+        flex-direction: column;
         gap: 16px;
-        padding: 8px;
+        padding: 16px;
       }
 
       .error {
@@ -778,27 +848,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-top: 16px;
       }
 
       .devices-header h3 {
         margin: 0;
-      }
-
-      .device-config {
-        border: 1px solid var(--divider-color);
-        border-radius: 8px;
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .device-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-weight: 500;
       }
 
       .modes-section,
@@ -830,6 +883,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         margin-top: 4px;
         z-index: 10;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        max-height: 300px;
+        overflow-y: auto;
       }
 
       .icon-suggestion {
@@ -851,6 +906,11 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
 
       .icon-suggestion span {
         font-size: 0.9em;
+      }
+
+      ha-expansion-panel {
+        --ha-card-border-radius: 4px;
+        --expansion-panel-content-padding: 0;
       }
     `;
   }
