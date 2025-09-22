@@ -51,44 +51,10 @@ export interface TemperatureColors {
   hot: string;
 }
 
-// Common MDI icons for rooms
-const COMMON_MDI_ICONS = [
-  'mdi:home', 'mdi:sofa', 'mdi:bed', 'mdi:silverware-fork-knife', 
-  'mdi:toilet', 'mdi:shower', 'mdi:desk', 'mdi:garage',
-  'mdi:lightbulb', 'mdi:lightbulb-outline', 'mdi:speaker', 'mdi:air-purifier', 
-  'mdi:fan', 'mdi:ceiling-fan', 'mdi:thermometer', 'mdi:water-percent', 
-  'mdi:television', 'mdi:alpha-l-box', 'mdi:door', 'mdi:window-open', 
-  'mdi:flower', 'mdi:power', 'mdi:power-off', 'mdi:toggle-switch',
-  'mdi:kitchen', 'mdi:bedroom', 'mdi:bathroom', 'mdi:living-room',
-  'mdi:stairs', 'mdi:balcony', 'mdi:pool', 'mdi:tree',
-  'mdi:car', 'mdi:washing-machine', 'mdi:dishwasher', 'mdi:microwave',
-  'mdi:coffee-maker', 'mdi:kettle', 'mdi:fridge', 'mdi:stove',
-  'mdi:lamp', 'mdi:floor-lamp', 'mdi:wall-sconce', 'mdi:chandelier',
-  'mdi:blinds', 'mdi:curtains', 'mdi:roller-shade', 'mdi:window-shutter',
-  'mdi:music', 'mdi:music-note', 'mdi:volume-high', 'mdi:volume-medium',
-  'mdi:play', 'mdi:pause', 'mdi:stop', 'mdi:skip-next',
-  'mdi:air-conditioner', 'mdi:radiator', 'mdi:fireplace', 'mdi:weather-sunny',
-  'mdi:robot-vacuum', 'mdi:vacuum', 'mdi:broom', 'mdi:spray-bottle'
-];
-
-// Common entity attributes
-const ENTITY_ATTRIBUTES = {
-  light: ['brightness', 'rgb_color', 'color_temp', 'effect'],
-  media_player: ['volume_level', 'media_position', 'media_duration'],
-  fan: ['percentage', 'preset_mode', 'speed'],
-  climate: ['temperature', 'target_temp_high', 'target_temp_low', 'humidity'],
-  cover: ['position', 'tilt_position'],
-  vacuum: ['battery_level', 'fan_speed']
-};
-
 @customElement('room-card-editor')
 export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   @state() private _hass?: HomeAssistant;
   @state() private _config?: RoomCardConfig;
-  @state() private _iconSearch = '';
-  @state() private _deviceIconSearch: Record<number, string> = {};
-  @state() private _iconFocused = false;
-  @state() private _deviceIconFocused: Record<number, boolean> = {};
   @state() private _expandedSections: Record<string, boolean> = {
     basic: true,
     appearance: false,
@@ -97,133 +63,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   };
   @state() private _expandedDevices: Record<number, boolean> = {};
 
-  // Debug method - can be called from browser console
-  debugInfo() {
-    const info = {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      hassStatesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0,
-      hassAreasCount: this._hass?.areas ? Object.keys(this._hass.areas).length : 0,
-      sampleEntities: this._hass?.states ? Object.keys(this._hass.states).slice(0, 10) : [],
-      sampleAreas: this._hass?.areas ? Object.values(this._hass.areas).slice(0, 5).map((a: any) => a.name) : [],
-      config: this._config,
-      elementInfo: {
-        shadowRoot: !!this.shadowRoot,
-        entityPickersCount: this.shadowRoot?.querySelectorAll('ha-entity-picker').length || 0
-      }
-    };
-    console.log('🟦 Debug Info:', info);
-    return info;
-  }
-
-  // Lifecycle methods for debugging
-  connectedCallback() {
-    super.connectedCallback();
-    console.log('🟣 RoomCardEditor: connectedCallback', {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Check if ha-entity-picker is defined
-    console.log('🔧 Checking custom elements:');
-    console.log('- ha-entity-picker defined?', !!customElements.get('ha-entity-picker'));
-    console.log('- ha-select defined?', !!customElements.get('ha-select'));
-    console.log('- ha-textfield defined?', !!customElements.get('ha-textfield'));
-    console.log('- ha-switch defined?', !!customElements.get('ha-switch'));
-    console.log('- ha-combo-box defined?', !!customElements.get('ha-combo-box'));
-    console.log('- ha-expansion-panel defined?', !!customElements.get('ha-expansion-panel'));
-    
-    // Try to wait for ha-entity-picker to be defined
-    if (!customElements.get('ha-entity-picker')) {
-      console.warn('⚠️ ha-entity-picker is not defined! Waiting for it...');
-      customElements.whenDefined('ha-entity-picker').then(() => {
-        console.log('✅ ha-entity-picker is now defined! Requesting update...');
-        this.requestUpdate();
-      }).catch((err) => {
-        console.error('❌ Error waiting for ha-entity-picker:', err);
-      });
-    }
-    
-    // Make debug method accessible from console
-    (window as any).roomCardEditorDebug = () => this.debugInfo();
-    console.log('💡 TIP: You can run "roomCardEditorDebug()" in the console to inspect the editor state');
-  }
-
-  firstUpdated() {
-    console.log('🟣 RoomCardEditor: firstUpdated', {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  updated(changedProperties: Map<string, any>) {
-    console.log('🟣 RoomCardEditor: updated', {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      changedProps: Array.from(changedProperties.keys()),
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  // Lifecycle methods for debugging
-  connectedCallback() {
-    super.connectedCallback();
-    console.log('🟣 RoomCardEditor: connectedCallback', {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  firstUpdated() {
-    console.log('🟣 RoomCardEditor: firstUpdated', {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  updated(changedProperties: Map<string, any>) {
-    console.log('🟣 RoomCardEditor: updated', {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      changedProps: Array.from(changedProperties.keys()),
-      timestamp: new Date().toISOString()
-    });
-  }
-
   // Setter for hass object - required for Home Assistant to pass the hass object
   set hass(hass: HomeAssistant) {
-    console.log('🔵 RoomCardEditor: hass setter called', {
-      hasHass: !!hass,
-      hasStates: !!(hass?.states),
-      statesCount: hass?.states ? Object.keys(hass.states).length : 0,
-      hasAreas: !!(hass?.areas),
-      areasCount: hass?.areas ? Object.keys(hass.areas).length : 0,
-      timestamp: new Date().toISOString()
-    });
-    
     this._hass = hass;
-    
-    // Log a sample of entities to verify they exist
-    if (hass?.states) {
-      const entityIds = Object.keys(hass.states).slice(0, 5);
-      console.log('🔵 Sample entities:', entityIds);
-    }
-    
-    // Trigger a re-render when hass is set
-    this.requestUpdate();
   }
 
   public setConfig(config: RoomCardConfig): void {
-    console.log('🟢 RoomCardEditor: setConfig called', {
-      config,
-      hasHass: !!this._hass,
-      timestamp: new Date().toISOString()
-    });
-    
     this._config = { ...config };
     // Initialize background_type if not set
     if (!this._config.background_type) {
@@ -237,25 +82,11 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     }
   }
 
-  private _toggleSection(section: string): void {
-    this._expandedSections = {
-      ...this._expandedSections,
-      [section]: !this._expandedSections[section]
-    };
-  }
-
-  private _toggleDevice(index: number): void {
-    this._expandedDevices = {
-      ...this._expandedDevices,
-      [index]: !this._expandedDevices[index]
-    };
-  }
-
   private _valueChanged(ev: any): void {
     if (!this._config || !this._hass) return;
 
     const target = ev.target;
-    const configPath = target?.configPath || ev.currentTarget?.configPath;
+    const configPath = target?.configPath || target?.configValue || ev.currentTarget?.configPath;
     
     let value;
     
@@ -290,6 +121,24 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     current[keys[keys.length - 1]] = value;
   }
 
+  // Helper method for device property changes
+  private _handleDeviceChange(ev: any, index: number): void {
+    if (!this._config?.devices) return;
+
+    const target = ev.target as any;
+    const configValue = target.configValue || ev.currentTarget?.configValue;
+    const value = ev.detail?.value !== undefined ? ev.detail.value : 
+                  target.checked !== undefined ? target.checked : 
+                  target.value;
+
+    if (configValue && value !== undefined) {
+      const devices = [...this._config.devices];
+      devices[index] = { ...devices[index], [configValue]: value };
+      this._config = { ...this._config, devices };
+      fireEvent(this, 'config-changed', { config: this._config });
+    }
+  }
+
   private _addDevice(): void {
     if (!this._config) return;
     
@@ -308,7 +157,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     });
     
     this._config = { ...this._config, devices };
-    this._expandedDevices[newIndex] = true; // Expand newly added device
+    this._expandedDevices[newIndex] = true;
     fireEvent(this, 'config-changed', { config: this._config });
   }
 
@@ -355,12 +204,21 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _getEntityAttributes(entity: string): string[] {
-    if (!this._hass || !entity) return [];
+    if (!this._hass || !entity) return ['brightness', 'volume_level', 'percentage'];
     
     const domain = entity.split('.')[0];
-    const defaultAttrs = ENTITY_ATTRIBUTES[domain as keyof typeof ENTITY_ATTRIBUTES] || [];
+    const domainAttributes: Record<string, string[]> = {
+      light: ['brightness', 'rgb_color', 'color_temp', 'effect'],
+      media_player: ['volume_level', 'media_position', 'media_duration'],
+      fan: ['percentage', 'preset_mode', 'speed'],
+      climate: ['temperature', 'target_temp_high', 'target_temp_low', 'humidity'],
+      cover: ['position', 'tilt_position'],
+      vacuum: ['battery_level', 'fan_speed']
+    };
     
+    const defaultAttrs = domainAttributes[domain] || [];
     const stateObj = this._hass.states[entity];
+    
     if (stateObj?.attributes) {
       const customAttrs = Object.keys(stateObj.attributes).filter(
         attr => !['friendly_name', 'icon', 'entity_id'].includes(attr)
@@ -368,15 +226,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       return [...new Set([...defaultAttrs, ...customAttrs])];
     }
     
-    return defaultAttrs;
-  }
-
-  private _getFilteredIcons(search: string): string[] {
-    if (!search) return COMMON_MDI_ICONS;
-    const searchLower = search.toLowerCase();
-    return COMMON_MDI_ICONS.filter(icon => 
-      icon.toLowerCase().includes(searchLower)
-    );
+    return defaultAttrs.length > 0 ? defaultAttrs : ['brightness', 'volume_level', 'percentage'];
   }
 
   private _renderBasicSection(): TemplateResult {
@@ -392,7 +242,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           <ha-combo-box
             label="Area (Required)"
             .value=${this._config!.area || ''}
-            .configPath=${'area'}
+            .configValue=${'area'}
             .items=${areas.map(area => ({ value: area, label: area }))}
             item-value-path="value"
             item-label-path="label"
@@ -403,7 +253,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           <ha-textfield
             label="Display Name (Optional)"
             .value=${this._config!.name || ''}
-            .configPath=${'name'}
+            .configValue=${'name'}
             @input=${this._valueChanged}
             helper="Leave empty to use the area name"
           ></ha-textfield>
@@ -411,7 +261,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           <ha-formfield label="Haptic Feedback">
             <ha-switch
               .checked=${this._config!.haptic_feedback !== false}
-              .configPath=${'haptic_feedback'}
+              .configValue=${'haptic_feedback'}
               @change=${this._valueChanged}
             ></ha-switch>
           </ha-formfield>
@@ -421,8 +271,6 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _renderAppearanceSection(): TemplateResult {
-    const filteredIcons = this._getFilteredIcons(this._iconSearch);
-    
     return html`
       <ha-expansion-panel
         .header=${'Appearance'}
@@ -430,44 +278,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         @expanded-changed=${(e: any) => this._expandedSections.appearance = e.detail.expanded}
       >
         <div class="section-content">
-          <div class="icon-picker">
-            <ha-textfield
-              label="Icon"
-              .value=${this._config!.icon || ''}
-              .configPath=${'icon'}
-              @input=${(e: any) => {
-                this._iconSearch = e.target.value;
-                this._valueChanged(e);
-              }}
-              @focus=${() => {
-                this._iconFocused = true;
-                this._iconSearch = this._config!.icon || '';
-              }}
-              @blur=${() => {
-                setTimeout(() => {
-                  this._iconFocused = false;
-                  this._iconSearch = '';
-                }, 200);
-              }}
-              helper="MDI icon name (e.g., mdi:home)"
-            ></ha-textfield>
-            
-            ${this._iconFocused && filteredIcons.length > 0 ? html`
-              <div class="icon-suggestions">
-                ${filteredIcons.slice(0, 8).map(icon => html`
-                  <div class="icon-suggestion" @click=${() => {
-                    this._config = { ...this._config!, icon };
-                    this._iconSearch = '';
-                    this._iconFocused = false;
-                    fireEvent(this, 'config-changed', { config: this._config });
-                  }}>
-                    <ha-icon icon="${icon}"></ha-icon>
-                    <span>${icon}</span>
-                  </div>
-                `)}
-              </div>
-            ` : ''}
-          </div>
+          <ha-icon-picker
+            label="Icon"
+            .value=${this._config!.icon || 'mdi:home'}
+            .configValue=${'icon'}
+            @value-changed=${this._valueChanged}
+          ></ha-icon-picker>
 
           <ha-select
             naturalMenuWidth
@@ -492,7 +308,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-textfield
               label="Icon Color"
               .value=${this._config!.icon_color || '#FFFFFF'}
-              .configPath=${'icon_color'}
+              .configValue=${'icon_color'}
               @input=${this._valueChanged}
               helper="Hex color code"
             ></ha-textfield>
@@ -500,7 +316,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-entity-picker
               .hass=${this._hass}
               .value=${(this._config!.icon_color as any)?.entity || ''}
-              .configPath=${'icon_color.entity'}
+              .configValue=${'icon_color.entity'}
               @value-changed=${this._valueChanged}
               allow-custom-entity
               label="Icon Color Entity"
@@ -530,7 +346,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-textfield
               label="Icon Background Color"
               .value=${this._config!.icon_background_color || 'rgba(255, 255, 255, 0.2)'}
-              .configPath=${'icon_background_color'}
+              .configValue=${'icon_background_color'}
               @input=${this._valueChanged}
               helper="Hex or rgba color"
             ></ha-textfield>
@@ -538,7 +354,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-entity-picker
               .hass=${this._hass}
               .value=${(this._config!.icon_background_color as any)?.entity || ''}
-              .configPath=${'icon_background_color.entity'}
+              .configValue=${'icon_background_color.entity'}
               @value-changed=${this._valueChanged}
               allow-custom-entity
               label="Icon Background Entity"
@@ -549,7 +365,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             naturalMenuWidth
             fixedMenuPosition
             label="Background Type"
-            .configPath=${'background_type'}
+            .configValue=${'background_type'}
             .value=${this._config!.background_type || 'temperature'}
             @selected=${this._valueChanged}
             @closed=${(e: Event) => e.stopPropagation()}
@@ -563,7 +379,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-textfield
               label="Background Color"
               .value=${this._config!.background_color || '#353535'}
-              .configPath=${'background_color'}
+              .configValue=${'background_color'}
               @input=${this._valueChanged}
               helper="Hex color code (e.g., #353535)"
             ></ha-textfield>
@@ -573,7 +389,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-entity-picker
               .hass=${this._hass}
               .value=${this._config!.background_entity || ''}
-              .configPath=${'background_entity'}
+              .configValue=${'background_entity'}
               @value-changed=${this._valueChanged}
               allow-custom-entity
               label="Background Entity"
@@ -587,7 +403,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                 @input=${(e: any) => {
                   try {
                     const colors = JSON.parse(e.target.value);
-                    this._valueChanged({ target: { configPath: 'background_state_colors', value: colors }});
+                    this._valueChanged({ target: { configValue: 'background_state_colors', value: colors }});
                   } catch (err) {
                     // Invalid JSON, ignore
                   }
@@ -602,33 +418,9 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _renderSensorsSection(): TemplateResult {
-    console.log('🟡 Rendering sensors section', {
-      hasHass: !!this._hass,
-      hasStates: !!this._hass?.states,
-      statesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0,
-      hasEntityPicker: !!customElements.get('ha-entity-picker')
-    });
-
     if (!this._hass) {
-      console.warn('⚠️ No hass object in _renderSensorsSection');
       return html`<div class="section-content">Loading sensors...</div>`;
     }
-
-    const entities = Object.keys(this._hass.states).sort();
-    console.log('🟡 Found entities for sensors:', entities.length);
-    
-    const temperatureSensors = entities.filter(e => 
-      e.includes('temperature') || 
-      e.includes('temp') || 
-      this._hass!.states[e].attributes.device_class === 'temperature'
-    );
-    const humiditySensors = entities.filter(e => 
-      e.includes('humidity') || 
-      this._hass!.states[e].attributes.device_class === 'humidity'
-    );
-
-    console.log('🟡 Temperature sensors found:', temperatureSensors.length, temperatureSensors.slice(0, 3));
-    console.log('🟡 Humidity sensors found:', humiditySensors.length, humiditySensors.slice(0, 3));
 
     return html`
       <ha-expansion-panel
@@ -637,64 +429,32 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         @expanded-changed=${(e: any) => this._expandedSections.sensors = e.detail.expanded}
       >
         <div class="section-content">
-          ${customElements.get('ha-entity-picker') ? html`
-            <!-- Use ha-entity-picker if available -->
-            <ha-entity-picker
-              .hass=${this._hass}
-              .value=${this._config!.temperature_sensor || ''}
-              .configPath=${'temperature_sensor'}
-              @value-changed=${this._valueChanged}
-              .includeDomains=${['sensor']}
-              .includeDeviceClasses=${['temperature']}
-              allow-custom-entity
-              label="Temperature Sensor"
-            ></ha-entity-picker>
+          <ha-entity-picker
+            .hass=${this._hass}
+            .value=${this._config!.temperature_sensor || ''}
+            .configValue=${'temperature_sensor'}
+            @value-changed=${this._valueChanged}
+            .includeDomains=${['sensor']}
+            .includeDeviceClasses=${['temperature']}
+            allow-custom-entity
+            label="Temperature Sensor"
+          ></ha-entity-picker>
 
-            <ha-entity-picker
-              .hass=${this._hass}
-              .value=${this._config!.humidity_sensor || ''}
-              .configPath=${'humidity_sensor'}
-              @value-changed=${this._valueChanged}
-              .includeDomains=${['sensor']}
-              .includeDeviceClasses=${['humidity']}
-              allow-custom-entity
-              label="Humidity Sensor"
-            ></ha-entity-picker>
-          ` : html`
-            <!-- Fallback to combo-box if entity-picker not available -->
-            <ha-combo-box
-              label="Temperature Sensor"
-              .value=${this._config!.temperature_sensor || ''}
-              .configPath=${'temperature_sensor'}
-              .items=${temperatureSensors.map(entity => ({
-                value: entity,
-                label: entity
-              }))}
-              item-value-path="value"
-              item-label-path="label"
-              allow-custom-value
-              @value-changed=${this._valueChanged}
-            ></ha-combo-box>
-
-            <ha-combo-box
-              label="Humidity Sensor"
-              .value=${this._config!.humidity_sensor || ''}
-              .configPath=${'humidity_sensor'}
-              .items=${humiditySensors.map(entity => ({
-                value: entity,
-                label: entity
-              }))}
-              item-value-path="value"
-              item-label-path="label"
-              allow-custom-value
-              @value-changed=${this._valueChanged}
-            ></ha-combo-box>
-          `}
+          <ha-entity-picker
+            .hass=${this._hass}
+            .value=${this._config!.humidity_sensor || ''}
+            .configValue=${'humidity_sensor'}
+            @value-changed=${this._valueChanged}
+            .includeDomains=${['sensor']}
+            .includeDeviceClasses=${['humidity']}
+            allow-custom-entity
+            label="Humidity Sensor"
+          ></ha-entity-picker>
 
           <ha-formfield label="Show Temperature">
             <ha-switch
               .checked=${this._config!.show_temperature !== false}
-              .configPath=${'show_temperature'}
+              .configValue=${'show_temperature'}
               @change=${this._valueChanged}
             ></ha-switch>
           </ha-formfield>
@@ -702,7 +462,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           <ha-formfield label="Show Humidity">
             <ha-switch
               .checked=${this._config!.show_humidity !== false}
-              .configPath=${'show_humidity'}
+              .configValue=${'show_humidity'}
               @change=${this._valueChanged}
             ></ha-switch>
           </ha-formfield>
@@ -711,7 +471,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             naturalMenuWidth
             fixedMenuPosition
             label="Temperature Unit"
-            .configPath=${'temperature_unit'}
+            .configValue=${'temperature_unit'}
             .value=${this._config!.temperature_unit || 'F'}
             @selected=${this._valueChanged}
             @closed=${(e: Event) => e.stopPropagation()}
@@ -763,139 +523,45 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                 `}
               >
                 <div class="device-content">
-                  ${customElements.get('ha-entity-picker') ? html`
-                    <!-- Use ha-entity-picker if available -->
-                    <ha-entity-picker
-                      .hass=${this._hass}
-                      .value=${device.entity || ''}
-                      @value-changed=${(e: any) => {
-                        const devices = [...this._config!.devices!];
-                        devices[index] = { ...devices[index], entity: e.detail.value };
-                        this._config = { ...this._config!, devices };
-                        fireEvent(this, 'config-changed', { config: this._config });
-                      }}
-                      allow-custom-entity
-                      label="Display Entity"
-                    ></ha-entity-picker>
+                  <ha-entity-picker
+                    .hass=${this._hass}
+                    .value=${device.entity || ''}
+                    .configValue=${'entity'}
+                    @value-changed=${(e: any) => this._handleDeviceChange(e, index)}
+                    allow-custom-entity
+                    label="Display Entity"
+                  ></ha-entity-picker>
 
-                    <ha-entity-picker
-                      .hass=${this._hass}
-                      .value=${device.control_entity || ''}
-                      @value-changed=${(e: any) => {
-                        const devices = [...this._config!.devices!];
-                        devices[index] = { ...devices[index], control_entity: e.detail.value };
-                        this._config = { ...this._config!, devices };
-                        fireEvent(this, 'config-changed', { config: this._config });
-                      }}
-                      allow-custom-entity
-                      label="Control Entity (Optional)"
-                      helper="Leave empty to use display entity"
-                    ></ha-entity-picker>
-                  ` : html`
-                    <!-- Fallback to combo-box if entity-picker not available -->
-                    <ha-combo-box
-                      label="Display Entity"
-                      .value=${device.entity || ''}
-                      .items=${Object.keys(this._hass?.states || {}).map(entity => ({
-                        value: entity,
-                        label: entity
-                      }))}
-                      item-value-path="value"
-                      item-label-path="label"
-                      allow-custom-value
-                      @value-changed=${(e: any) => {
-                        const devices = [...this._config!.devices!];
-                        devices[index] = { ...devices[index], entity: e.detail.value };
-                        this._config = { ...this._config!, devices };
-                        fireEvent(this, 'config-changed', { config: this._config });
-                      }}
-                    ></ha-combo-box>
-
-                    <ha-combo-box
-                      label="Control Entity (Optional)"
-                      .value=${device.control_entity || ''}
-                      .items=${Object.keys(this._hass?.states || {}).map(entity => ({
-                        value: entity,
-                        label: entity
-                      }))}
-                      item-value-path="value"
-                      item-label-path="label"
-                      allow-custom-value
-                      helper-text="Leave empty to use display entity"
-                      @value-changed=${(e: any) => {
-                        const devices = [...this._config!.devices!];
-                        devices[index] = { ...devices[index], control_entity: e.detail.value };
-                        this._config = { ...this._config!, devices };
-                        fireEvent(this, 'config-changed', { config: this._config });
-                      }}
-                    ></ha-combo-box>
-                  `}
+                  <ha-entity-picker
+                    .hass=${this._hass}
+                    .value=${device.control_entity || ''}
+                    .configValue=${'control_entity'}
+                    @value-changed=${(e: any) => this._handleDeviceChange(e, index)}
+                    allow-custom-entity
+                    label="Control Entity (Optional)"
+                    helper="Leave empty to use display entity"
+                  ></ha-entity-picker>
 
                   <ha-select
                     naturalMenuWidth
                     fixedMenuPosition
                     label="Attribute"
                     .value=${device.attribute || 'brightness'}
-                    @selected=${(e: any) => {
-                      const devices = [...this._config!.devices!];
-                      devices[index] = { ...devices[index], attribute: e.detail.value };
-                      this._config = { ...this._config!, devices };
-                      fireEvent(this, 'config-changed', { config: this._config });
-                    }}
+                    .configValue=${'attribute'}
+                    @selected=${(e: any) => this._handleDeviceChange(e, index)}
                     @closed=${(e: Event) => e.stopPropagation()}
                   >
-                    ${entityAttrs.length > 0 ? entityAttrs.map(attr => html`
+                    ${entityAttrs.map(attr => html`
                       <ha-list-item value=${attr}>${attr}</ha-list-item>
-                    `) : html`
-                      <ha-list-item value="brightness">brightness</ha-list-item>
-                      <ha-list-item value="volume_level">volume_level</ha-list-item>
-                      <ha-list-item value="percentage">percentage</ha-list-item>
-                    `}
+                    `)}
                   </ha-select>
 
-                  <div class="icon-picker">
-                    <ha-textfield
-                      label="Icon"
-                      .value=${device.icon || ''}
-                      @input=${(e: any) => {
-                        const devices = [...this._config!.devices!];
-                        devices[index] = { ...devices[index], icon: e.target.value };
-                        this._config = { ...this._config!, devices };
-                        this._deviceIconSearch = { ...this._deviceIconSearch, [index]: e.target.value };
-                        fireEvent(this, 'config-changed', { config: this._config });
-                      }}
-                      @focus=${() => {
-                        this._deviceIconFocused = { ...this._deviceIconFocused, [index]: true };
-                        if (!this._deviceIconSearch[index]) {
-                          this._deviceIconSearch = { ...this._deviceIconSearch, [index]: device.icon || '' };
-                        }
-                      }}
-                      @blur=${() => {
-                        setTimeout(() => {
-                          this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
-                        }, 200);
-                      }}
-                      helper="MDI icon name"
-                    ></ha-textfield>
-                    
-                    ${this._deviceIconFocused[index] ? html`
-                      <div class="icon-suggestions">
-                        ${this._getFilteredIcons(this._deviceIconSearch[index] || device.icon || '').slice(0, 8).map(icon => html`
-                          <div class="icon-suggestion" @click=${() => {
-                            const devices = [...this._config!.devices!];
-                            devices[index] = { ...devices[index], icon };
-                            this._config = { ...this._config!, devices };
-                            this._deviceIconSearch = { ...this._deviceIconSearch, [index]: '' };
-                            this._deviceIconFocused = { ...this._deviceIconFocused, [index]: false };
-                            fireEvent(this, 'config-changed', { config: this._config });
-                          }}>
-                            <ha-icon icon="${icon}"></ha-icon>
-                            <span>${icon}</span>
-                          </div>
-                        `)}
-                      </div>
-                    ` : ''}
-                  </div>
+                  <ha-icon-picker
+                    label="Icon"
+                    .value=${device.icon || 'mdi:lightbulb'}
+                    .configValue=${'icon'}
+                    @value-changed=${(e: any) => this._handleDeviceChange(e, index)}
+                  ></ha-icon-picker>
 
                   <ha-select
                     naturalMenuWidth
@@ -904,10 +570,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     .value=${device.color === 'light-color' ? 'light-color' : 'custom'}
                     @selected=${(e: any) => {
                       const value = e.target.value === 'light-color' ? 'light-color' : '#FDD835';
-                      const devices = [...this._config!.devices!];
-                      devices[index] = { ...devices[index], color: value };
-                      this._config = { ...this._config!, devices };
-                      fireEvent(this, 'config-changed', { config: this._config });
+                      this._handleDeviceChange({ 
+                        target: { configValue: 'color' },
+                        detail: { value }
+                      }, index);
                     }}
                     @closed=${(e: Event) => e.stopPropagation()}
                   >
@@ -921,12 +587,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     <ha-textfield
                       label="Custom Color"
                       .value=${typeof device.color === 'string' ? device.color : '#FDD835'}
-                      @input=${(e: any) => {
-                        const devices = [...this._config!.devices!];
-                        devices[index] = { ...devices[index], color: e.target.value };
-                        this._config = { ...this._config!, devices };
-                        fireEvent(this, 'config-changed', { config: this._config });
-                      }}
+                      .configValue=${'color'}
+                      @input=${(e: any) => this._handleDeviceChange(e, index)}
                       helper="Hex color code (e.g., #FDD835)"
                     ></ha-textfield>
                   ` : ''}
@@ -935,12 +597,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     label="Scale"
                     type="number"
                     .value=${device.scale || 100}
-                    @input=${(e: any) => {
-                      const devices = [...this._config!.devices!];
-                      devices[index] = { ...devices[index], scale: parseInt(e.target.value) || 100 };
-                      this._config = { ...this._config!, devices };
-                      fireEvent(this, 'config-changed', { config: this._config });
-                    }}
+                    .configValue=${'scale'}
+                    @input=${(e: any) => this._handleDeviceChange(e, index)}
                     helper="Maximum value (255 for brightness, 1 for volume, 100 for percentage)"
                   ></ha-textfield>
 
@@ -949,12 +607,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     fixedMenuPosition
                     label="Control Type"
                     .value=${device.type || 'continuous'}
-                    @selected=${(e: any) => {
-                      const devices = [...this._config!.devices!];
-                      devices[index] = { ...devices[index], type: e.detail.value };
-                      this._config = { ...this._config!, devices };
-                      fireEvent(this, 'config-changed', { config: this._config });
-                    }}
+                    .configValue=${'type'}
+                    @selected=${(e: any) => this._handleDeviceChange(e, index)}
                     @closed=${(e: Event) => e.stopPropagation()}
                   >
                     <ha-list-item value="continuous">Continuous (Slider)</ha-list-item>
@@ -965,24 +619,16 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                     <ha-formfield label="Show Slider">
                       <ha-switch
                         .checked=${device.show_slider !== false}
-                        @change=${(e: any) => {
-                          const devices = [...this._config!.devices!];
-                          devices[index] = { ...devices[index], show_slider: e.target.checked };
-                          this._config = { ...this._config!, devices };
-                          fireEvent(this, 'config-changed', { config: this._config });
-                        }}
+                        .configValue=${'show_slider'}
+                        @change=${(e: any) => this._handleDeviceChange(e, index)}
                       ></ha-switch>
                     </ha-formfield>
 
                     <ha-formfield label="Show Chip">
                       <ha-switch
                         .checked=${device.show_chip !== false}
-                        @change=${(e: any) => {
-                          const devices = [...this._config!.devices!];
-                          devices[index] = { ...devices[index], show_chip: e.target.checked };
-                          this._config = { ...this._config!, devices };
-                          fireEvent(this, 'config-changed', { config: this._config });
-                        }}
+                        .configValue=${'show_chip'}
+                        @change=${(e: any) => this._handleDeviceChange(e, index)}
                       ></ha-switch>
                     </ha-formfield>
                   </div>
@@ -996,10 +642,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                         @input=${(e: any) => {
                           try {
                             const modes = JSON.parse(e.target.value);
-                            const devices = [...this._config!.devices!];
-                            devices[index] = { ...devices[index], modes };
-                            this._config = { ...this._config!, devices };
-                            fireEvent(this, 'config-changed', { config: this._config });
+                            this._handleDeviceChange({ 
+                              target: { configValue: 'modes' },
+                              detail: { value: modes }
+                            }, index);
                           } catch (err) {
                             // Invalid JSON, ignore
                           }
@@ -1018,75 +664,9 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   protected render(): TemplateResult {
-    console.log('🔴 RoomCardEditor: main render called', {
-      hasHass: !!this._hass,
-      hasConfig: !!this._config,
-      hassStatesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0,
-      timestamp: new Date().toISOString()
-    });
-
     if (!this._hass || !this._config) {
-      console.error('❌ RoomCardEditor: Missing requirements', {
-        hass: !!this._hass,
-        config: !!this._config
-      });
-      return html`<div class="error">Unable to load editor (hass: ${!!this._hass}, config: ${!!this._config})</div>`;
+      return html`<div class="error">Unable to load editor</div>`;
     }
-
-    // Debug: Check if ha-entity-picker is available
-    setTimeout(() => {
-      const entityPickers = this.shadowRoot?.querySelectorAll('ha-entity-picker');
-      console.log('🔍 Found entity pickers in DOM:', entityPickers?.length || 0);
-      entityPickers?.forEach((picker: any, index: number) => {
-        console.log(`🔍 Entity Picker ${index}:`, {
-          hasHass: !!picker.hass,
-          value: picker.value,
-          label: picker.label,
-          includeDomains: picker.includeDomains,
-          element: picker,
-          // Deep inspection of the picker's shadow DOM
-          shadowRoot: !!picker.shadowRoot,
-          comboBox: !!picker.shadowRoot?.querySelector('ha-combo-box'),
-          inputElement: !!picker.shadowRoot?.querySelector('input'),
-        });
-        
-        // Try to inspect the combo box inside
-        const comboBox = picker.shadowRoot?.querySelector('ha-combo-box');
-        if (comboBox) {
-          console.log(`🔎 ComboBox ${index}:`, {
-            items: comboBox.items?.length || 0,
-            value: comboBox.value,
-            disabled: comboBox.disabled,
-            filteredItems: comboBox.filteredItems?.length || 0,
-            _items: comboBox._items?.length || 0,
-            sampleItems: comboBox.items?.slice(0, 3)
-          });
-          
-          // Try to manually trigger opening
-          if (comboBox.items?.length === 0 && picker.hass) {
-            console.warn(`⚠️ Picker ${index} has hass but no items! Attempting manual population...`);
-            
-            // Try to access the picker's internal method if it exists
-            if (typeof picker._getEntities === 'function') {
-              console.log('Calling _getEntities...');
-              const entities = picker._getEntities();
-              console.log('Got entities:', entities?.length);
-            }
-            
-            // Check if the picker needs initialization
-            if (typeof picker.requestUpdate === 'function') {
-              console.log('Requesting update on picker...');
-              picker.requestUpdate();
-            }
-          }
-        }
-      });
-      
-      // Also try to manually click on one to see what happens
-      console.log('💡 TIP: Try clicking on an entity picker manually to see if it opens');
-      console.log('💡 You can also run this in console to inspect a picker:');
-      console.log('document.querySelector("room-card-editor").shadowRoot.querySelector("ha-entity-picker")');
-    }, 500);  // Increased delay to ensure everything is fully rendered
 
     return html`
       <div class="card-config">
@@ -1123,7 +703,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       ha-textfield,
       ha-select,
       ha-entity-picker,
-      ha-combo-box {
+      ha-combo-box,
+      ha-icon-picker {
         width: 100%;
       }
 
@@ -1163,46 +744,6 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         font-size: 0.9em;
         font-weight: 500;
         color: var(--secondary-text-color);
-      }
-
-      .icon-picker {
-        position: relative;
-      }
-
-      .icon-suggestions {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background: var(--card-background-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        margin-top: 4px;
-        z-index: 10;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        max-height: 300px;
-        overflow-y: auto;
-      }
-
-      .icon-suggestion {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-
-      .icon-suggestion:hover {
-        background: var(--secondary-background-color);
-      }
-
-      .icon-suggestion ha-icon {
-        --mdc-icon-size: 20px;
-      }
-
-      .icon-suggestion span {
-        font-size: 0.9em;
       }
 
       ha-expansion-panel {
