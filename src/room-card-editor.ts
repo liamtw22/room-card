@@ -125,6 +125,26 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       timestamp: new Date().toISOString()
     });
     
+    // Check if ha-entity-picker is defined
+    console.log('🔧 Checking custom elements:');
+    console.log('- ha-entity-picker defined?', !!customElements.get('ha-entity-picker'));
+    console.log('- ha-select defined?', !!customElements.get('ha-select'));
+    console.log('- ha-textfield defined?', !!customElements.get('ha-textfield'));
+    console.log('- ha-switch defined?', !!customElements.get('ha-switch'));
+    console.log('- ha-combo-box defined?', !!customElements.get('ha-combo-box'));
+    console.log('- ha-expansion-panel defined?', !!customElements.get('ha-expansion-panel'));
+    
+    // Try to wait for ha-entity-picker to be defined
+    if (!customElements.get('ha-entity-picker')) {
+      console.warn('⚠️ ha-entity-picker is not defined! Waiting for it...');
+      customElements.whenDefined('ha-entity-picker').then(() => {
+        console.log('✅ ha-entity-picker is now defined! Requesting update...');
+        this.requestUpdate();
+      }).catch((err) => {
+        console.error('❌ Error waiting for ha-entity-picker:', err);
+      });
+    }
+    
     // Make debug method accessible from console
     (window as any).roomCardEditorDebug = () => this.debugInfo();
     console.log('💡 TIP: You can run "roomCardEditorDebug()" in the console to inspect the editor state');
@@ -585,7 +605,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     console.log('🟡 Rendering sensors section', {
       hasHass: !!this._hass,
       hasStates: !!this._hass?.states,
-      statesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0
+      statesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0,
+      hasEntityPicker: !!customElements.get('ha-entity-picker')
     });
 
     if (!this._hass) {
@@ -616,27 +637,59 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         @expanded-changed=${(e: any) => this._expandedSections.sensors = e.detail.expanded}
       >
         <div class="section-content">
-          <ha-entity-picker
-            .hass=${this._hass}
-            .value=${this._config!.temperature_sensor || ''}
-            .configPath=${'temperature_sensor'}
-            @value-changed=${this._valueChanged}
-            .includeDomains=${['sensor']}
-            .includeDeviceClasses=${['temperature']}
-            allow-custom-entity
-            label="Temperature Sensor"
-          ></ha-entity-picker>
+          ${customElements.get('ha-entity-picker') ? html`
+            <!-- Use ha-entity-picker if available -->
+            <ha-entity-picker
+              .hass=${this._hass}
+              .value=${this._config!.temperature_sensor || ''}
+              .configPath=${'temperature_sensor'}
+              @value-changed=${this._valueChanged}
+              .includeDomains=${['sensor']}
+              .includeDeviceClasses=${['temperature']}
+              allow-custom-entity
+              label="Temperature Sensor"
+            ></ha-entity-picker>
 
-          <ha-entity-picker
-            .hass=${this._hass}
-            .value=${this._config!.humidity_sensor || ''}
-            .configPath=${'humidity_sensor'}
-            @value-changed=${this._valueChanged}
-            .includeDomains=${['sensor']}
-            .includeDeviceClasses=${['humidity']}
-            allow-custom-entity
-            label="Humidity Sensor"
-          ></ha-entity-picker>
+            <ha-entity-picker
+              .hass=${this._hass}
+              .value=${this._config!.humidity_sensor || ''}
+              .configPath=${'humidity_sensor'}
+              @value-changed=${this._valueChanged}
+              .includeDomains=${['sensor']}
+              .includeDeviceClasses=${['humidity']}
+              allow-custom-entity
+              label="Humidity Sensor"
+            ></ha-entity-picker>
+          ` : html`
+            <!-- Fallback to combo-box if entity-picker not available -->
+            <ha-combo-box
+              label="Temperature Sensor"
+              .value=${this._config!.temperature_sensor || ''}
+              .configPath=${'temperature_sensor'}
+              .items=${temperatureSensors.map(entity => ({
+                value: entity,
+                label: entity
+              }))}
+              item-value-path="value"
+              item-label-path="label"
+              allow-custom-value
+              @value-changed=${this._valueChanged}
+            ></ha-combo-box>
+
+            <ha-combo-box
+              label="Humidity Sensor"
+              .value=${this._config!.humidity_sensor || ''}
+              .configPath=${'humidity_sensor'}
+              .items=${humiditySensors.map(entity => ({
+                value: entity,
+                label: entity
+              }))}
+              item-value-path="value"
+              item-label-path="label"
+              allow-custom-value
+              @value-changed=${this._valueChanged}
+            ></ha-combo-box>
+          `}
 
           <ha-formfield label="Show Temperature">
             <ha-switch
@@ -710,32 +763,73 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                 `}
               >
                 <div class="device-content">
-                  <ha-entity-picker
-                    .hass=${this._hass}
-                    .value=${device.entity || ''}
-                    @value-changed=${(e: any) => {
-                      const devices = [...this._config!.devices!];
-                      devices[index] = { ...devices[index], entity: e.detail.value };
-                      this._config = { ...this._config!, devices };
-                      fireEvent(this, 'config-changed', { config: this._config });
-                    }}
-                    allow-custom-entity
-                    label="Display Entity"
-                  ></ha-entity-picker>
+                  ${customElements.get('ha-entity-picker') ? html`
+                    <!-- Use ha-entity-picker if available -->
+                    <ha-entity-picker
+                      .hass=${this._hass}
+                      .value=${device.entity || ''}
+                      @value-changed=${(e: any) => {
+                        const devices = [...this._config!.devices!];
+                        devices[index] = { ...devices[index], entity: e.detail.value };
+                        this._config = { ...this._config!, devices };
+                        fireEvent(this, 'config-changed', { config: this._config });
+                      }}
+                      allow-custom-entity
+                      label="Display Entity"
+                    ></ha-entity-picker>
 
-                  <ha-entity-picker
-                    .hass=${this._hass}
-                    .value=${device.control_entity || ''}
-                    @value-changed=${(e: any) => {
-                      const devices = [...this._config!.devices!];
-                      devices[index] = { ...devices[index], control_entity: e.detail.value };
-                      this._config = { ...this._config!, devices };
-                      fireEvent(this, 'config-changed', { config: this._config });
-                    }}
-                    allow-custom-entity
-                    label="Control Entity (Optional)"
-                    helper="Leave empty to use display entity"
-                  ></ha-entity-picker>
+                    <ha-entity-picker
+                      .hass=${this._hass}
+                      .value=${device.control_entity || ''}
+                      @value-changed=${(e: any) => {
+                        const devices = [...this._config!.devices!];
+                        devices[index] = { ...devices[index], control_entity: e.detail.value };
+                        this._config = { ...this._config!, devices };
+                        fireEvent(this, 'config-changed', { config: this._config });
+                      }}
+                      allow-custom-entity
+                      label="Control Entity (Optional)"
+                      helper="Leave empty to use display entity"
+                    ></ha-entity-picker>
+                  ` : html`
+                    <!-- Fallback to combo-box if entity-picker not available -->
+                    <ha-combo-box
+                      label="Display Entity"
+                      .value=${device.entity || ''}
+                      .items=${Object.keys(this._hass?.states || {}).map(entity => ({
+                        value: entity,
+                        label: entity
+                      }))}
+                      item-value-path="value"
+                      item-label-path="label"
+                      allow-custom-value
+                      @value-changed=${(e: any) => {
+                        const devices = [...this._config!.devices!];
+                        devices[index] = { ...devices[index], entity: e.detail.value };
+                        this._config = { ...this._config!, devices };
+                        fireEvent(this, 'config-changed', { config: this._config });
+                      }}
+                    ></ha-combo-box>
+
+                    <ha-combo-box
+                      label="Control Entity (Optional)"
+                      .value=${device.control_entity || ''}
+                      .items=${Object.keys(this._hass?.states || {}).map(entity => ({
+                        value: entity,
+                        label: entity
+                      }))}
+                      item-value-path="value"
+                      item-label-path="label"
+                      allow-custom-value
+                      helper-text="Leave empty to use display entity"
+                      @value-changed=${(e: any) => {
+                        const devices = [...this._config!.devices!];
+                        devices[index] = { ...devices[index], control_entity: e.detail.value };
+                        this._config = { ...this._config!, devices };
+                        fireEvent(this, 'config-changed', { config: this._config });
+                      }}
+                    ></ha-combo-box>
+                  `}
 
                   <ha-select
                     naturalMenuWidth
@@ -949,10 +1043,50 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           value: picker.value,
           label: picker.label,
           includeDomains: picker.includeDomains,
-          element: picker
+          element: picker,
+          // Deep inspection of the picker's shadow DOM
+          shadowRoot: !!picker.shadowRoot,
+          comboBox: !!picker.shadowRoot?.querySelector('ha-combo-box'),
+          inputElement: !!picker.shadowRoot?.querySelector('input'),
         });
+        
+        // Try to inspect the combo box inside
+        const comboBox = picker.shadowRoot?.querySelector('ha-combo-box');
+        if (comboBox) {
+          console.log(`🔎 ComboBox ${index}:`, {
+            items: comboBox.items?.length || 0,
+            value: comboBox.value,
+            disabled: comboBox.disabled,
+            filteredItems: comboBox.filteredItems?.length || 0,
+            _items: comboBox._items?.length || 0,
+            sampleItems: comboBox.items?.slice(0, 3)
+          });
+          
+          // Try to manually trigger opening
+          if (comboBox.items?.length === 0 && picker.hass) {
+            console.warn(`⚠️ Picker ${index} has hass but no items! Attempting manual population...`);
+            
+            // Try to access the picker's internal method if it exists
+            if (typeof picker._getEntities === 'function') {
+              console.log('Calling _getEntities...');
+              const entities = picker._getEntities();
+              console.log('Got entities:', entities?.length);
+            }
+            
+            // Check if the picker needs initialization
+            if (typeof picker.requestUpdate === 'function') {
+              console.log('Requesting update on picker...');
+              picker.requestUpdate();
+            }
+          }
+        }
       });
-    }, 100);
+      
+      // Also try to manually click on one to see what happens
+      console.log('💡 TIP: Try clicking on an entity picker manually to see if it opens');
+      console.log('💡 You can also run this in console to inspect a picker:');
+      console.log('document.querySelector("room-card-editor").shadowRoot.querySelector("ha-entity-picker")');
+    }, 500);  // Increased delay to ensure everything is fully rendered
 
     return html`
       <div class="card-config">
