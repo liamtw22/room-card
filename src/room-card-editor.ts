@@ -1,5 +1,5 @@
 import { LitElement, html, css, TemplateResult, CSSResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCardEditor, fireEvent } from 'custom-card-helpers';
 
 export interface RoomCardConfig {
@@ -83,7 +83,7 @@ const ENTITY_ATTRIBUTES = {
 
 @customElement('room-card-editor')
 export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
-  @property({ attribute: false }) public hass!: HomeAssistant;
+  @state() private _hass?: HomeAssistant;
   @state() private _config?: RoomCardConfig;
   @state() private _iconSearch = '';
   @state() private _deviceIconSearch: Record<number, string> = {};
@@ -97,7 +97,113 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   };
   @state() private _expandedDevices: Record<number, boolean> = {};
 
+  // Debug method - can be called from browser console
+  debugInfo() {
+    const info = {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      hassStatesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0,
+      hassAreasCount: this._hass?.areas ? Object.keys(this._hass.areas).length : 0,
+      sampleEntities: this._hass?.states ? Object.keys(this._hass.states).slice(0, 10) : [],
+      sampleAreas: this._hass?.areas ? Object.values(this._hass.areas).slice(0, 5).map((a: any) => a.name) : [],
+      config: this._config,
+      elementInfo: {
+        shadowRoot: !!this.shadowRoot,
+        entityPickersCount: this.shadowRoot?.querySelectorAll('ha-entity-picker').length || 0
+      }
+    };
+    console.log('🟦 Debug Info:', info);
+    return info;
+  }
+
+  // Lifecycle methods for debugging
+  connectedCallback() {
+    super.connectedCallback();
+    console.log('🟣 RoomCardEditor: connectedCallback', {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Make debug method accessible from console
+    (window as any).roomCardEditorDebug = () => this.debugInfo();
+    console.log('💡 TIP: You can run "roomCardEditorDebug()" in the console to inspect the editor state');
+  }
+
+  firstUpdated() {
+    console.log('🟣 RoomCardEditor: firstUpdated', {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  updated(changedProperties: Map<string, any>) {
+    console.log('🟣 RoomCardEditor: updated', {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      changedProps: Array.from(changedProperties.keys()),
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Lifecycle methods for debugging
+  connectedCallback() {
+    super.connectedCallback();
+    console.log('🟣 RoomCardEditor: connectedCallback', {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  firstUpdated() {
+    console.log('🟣 RoomCardEditor: firstUpdated', {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  updated(changedProperties: Map<string, any>) {
+    console.log('🟣 RoomCardEditor: updated', {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      changedProps: Array.from(changedProperties.keys()),
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Setter for hass object - required for Home Assistant to pass the hass object
+  set hass(hass: HomeAssistant) {
+    console.log('🔵 RoomCardEditor: hass setter called', {
+      hasHass: !!hass,
+      hasStates: !!(hass?.states),
+      statesCount: hass?.states ? Object.keys(hass.states).length : 0,
+      hasAreas: !!(hass?.areas),
+      areasCount: hass?.areas ? Object.keys(hass.areas).length : 0,
+      timestamp: new Date().toISOString()
+    });
+    
+    this._hass = hass;
+    
+    // Log a sample of entities to verify they exist
+    if (hass?.states) {
+      const entityIds = Object.keys(hass.states).slice(0, 5);
+      console.log('🔵 Sample entities:', entityIds);
+    }
+    
+    // Trigger a re-render when hass is set
+    this.requestUpdate();
+  }
+
   public setConfig(config: RoomCardConfig): void {
+    console.log('🟢 RoomCardEditor: setConfig called', {
+      config,
+      hasHass: !!this._hass,
+      timestamp: new Date().toISOString()
+    });
+    
     this._config = { ...config };
     // Initialize background_type if not set
     if (!this._config.background_type) {
@@ -126,7 +232,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _valueChanged(ev: any): void {
-    if (!this._config || !this.hass) return;
+    if (!this._config || !this._hass) return;
 
     const target = ev.target;
     const configPath = target?.configPath || ev.currentTarget?.configPath;
@@ -209,19 +315,19 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _getAreas(): string[] {
-    if (!this.hass) return [];
+    if (!this._hass) return [];
     
     const areas = new Set<string>();
     
-    Object.values(this.hass.areas || {}).forEach((area: any) => {
+    Object.values(this._hass.areas || {}).forEach((area: any) => {
       if (area.name) {
         areas.add(area.name);
       }
     });
 
-    Object.values(this.hass.entities || {}).forEach((entity: any) => {
-      if (entity.area_id && this.hass.areas?.[entity.area_id]) {
-        areas.add(this.hass.areas[entity.area_id].name);
+    Object.values(this._hass.entities || {}).forEach((entity: any) => {
+      if (entity.area_id && this._hass!.areas?.[entity.area_id]) {
+        areas.add(this._hass!.areas[entity.area_id].name);
       }
     });
 
@@ -229,12 +335,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _getEntityAttributes(entity: string): string[] {
-    if (!this.hass || !entity) return [];
+    if (!this._hass || !entity) return [];
     
     const domain = entity.split('.')[0];
     const defaultAttrs = ENTITY_ATTRIBUTES[domain as keyof typeof ENTITY_ATTRIBUTES] || [];
     
-    const stateObj = this.hass.states[entity];
+    const stateObj = this._hass.states[entity];
     if (stateObj?.attributes) {
       const customAttrs = Object.keys(stateObj.attributes).filter(
         attr => !['friendly_name', 'icon', 'entity_id'].includes(attr)
@@ -372,7 +478,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             ></ha-textfield>
           ` : html`
             <ha-entity-picker
-              .hass=${this.hass}
+              .hass=${this._hass}
               .value=${(this._config!.icon_color as any)?.entity || ''}
               .configPath=${'icon_color.entity'}
               @value-changed=${this._valueChanged}
@@ -410,7 +516,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             ></ha-textfield>
           ` : html`
             <ha-entity-picker
-              .hass=${this.hass}
+              .hass=${this._hass}
               .value=${(this._config!.icon_background_color as any)?.entity || ''}
               .configPath=${'icon_background_color.entity'}
               @value-changed=${this._valueChanged}
@@ -445,7 +551,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
 
           ${this._config!.background_type === 'entity' ? html`
             <ha-entity-picker
-              .hass=${this.hass}
+              .hass=${this._hass}
               .value=${this._config!.background_entity || ''}
               .configPath=${'background_entity'}
               @value-changed=${this._valueChanged}
@@ -476,16 +582,32 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _renderSensorsSection(): TemplateResult {
-    const entities = Object.keys(this.hass.states).sort();
+    console.log('🟡 Rendering sensors section', {
+      hasHass: !!this._hass,
+      hasStates: !!this._hass?.states,
+      statesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0
+    });
+
+    if (!this._hass) {
+      console.warn('⚠️ No hass object in _renderSensorsSection');
+      return html`<div class="section-content">Loading sensors...</div>`;
+    }
+
+    const entities = Object.keys(this._hass.states).sort();
+    console.log('🟡 Found entities for sensors:', entities.length);
+    
     const temperatureSensors = entities.filter(e => 
       e.includes('temperature') || 
       e.includes('temp') || 
-      this.hass.states[e].attributes.device_class === 'temperature'
+      this._hass!.states[e].attributes.device_class === 'temperature'
     );
     const humiditySensors = entities.filter(e => 
       e.includes('humidity') || 
-      this.hass.states[e].attributes.device_class === 'humidity'
+      this._hass!.states[e].attributes.device_class === 'humidity'
     );
+
+    console.log('🟡 Temperature sensors found:', temperatureSensors.length, temperatureSensors.slice(0, 3));
+    console.log('🟡 Humidity sensors found:', humiditySensors.length, humiditySensors.slice(0, 3));
 
     return html`
       <ha-expansion-panel
@@ -495,7 +617,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       >
         <div class="section-content">
           <ha-entity-picker
-            .hass=${this.hass}
+            .hass=${this._hass}
             .value=${this._config!.temperature_sensor || ''}
             .configPath=${'temperature_sensor'}
             @value-changed=${this._valueChanged}
@@ -506,7 +628,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           ></ha-entity-picker>
 
           <ha-entity-picker
-            .hass=${this.hass}
+            .hass=${this._hass}
             .value=${this._config!.humidity_sensor || ''}
             .configPath=${'humidity_sensor'}
             @value-changed=${this._valueChanged}
@@ -550,6 +672,10 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   private _renderDevicesSection(): TemplateResult {
+    if (!this._hass) {
+      return html`<div class="section-content">Loading devices...</div>`;
+    }
+
     return html`
       <ha-expansion-panel
         .header=${'Devices'}
@@ -585,7 +711,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
               >
                 <div class="device-content">
                   <ha-entity-picker
-                    .hass=${this.hass}
+                    .hass=${this._hass}
                     .value=${device.entity || ''}
                     @value-changed=${(e: any) => {
                       const devices = [...this._config!.devices!];
@@ -598,7 +724,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
                   ></ha-entity-picker>
 
                   <ha-entity-picker
-                    .hass=${this.hass}
+                    .hass=${this._hass}
                     .value=${device.control_entity || ''}
                     @value-changed=${(e: any) => {
                       const devices = [...this._config!.devices!];
@@ -798,9 +924,35 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   }
 
   protected render(): TemplateResult {
-    if (!this.hass || !this._config) {
-      return html`<div class="error">Unable to load editor</div>`;
+    console.log('🔴 RoomCardEditor: main render called', {
+      hasHass: !!this._hass,
+      hasConfig: !!this._config,
+      hassStatesCount: this._hass?.states ? Object.keys(this._hass.states).length : 0,
+      timestamp: new Date().toISOString()
+    });
+
+    if (!this._hass || !this._config) {
+      console.error('❌ RoomCardEditor: Missing requirements', {
+        hass: !!this._hass,
+        config: !!this._config
+      });
+      return html`<div class="error">Unable to load editor (hass: ${!!this._hass}, config: ${!!this._config})</div>`;
     }
+
+    // Debug: Check if ha-entity-picker is available
+    setTimeout(() => {
+      const entityPickers = this.shadowRoot?.querySelectorAll('ha-entity-picker');
+      console.log('🔍 Found entity pickers in DOM:', entityPickers?.length || 0);
+      entityPickers?.forEach((picker: any, index: number) => {
+        console.log(`🔍 Entity Picker ${index}:`, {
+          hasHass: !!picker.hass,
+          value: picker.value,
+          label: picker.label,
+          includeDomains: picker.includeDomains,
+          element: picker
+        });
+      });
+    }, 100);
 
     return html`
       <div class="card-config">
