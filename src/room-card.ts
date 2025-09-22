@@ -308,31 +308,32 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private handleIconClick(): void {
-    if (!this.hass) return;
-
-    const startIndex = this.currentDeviceIndex;
-    let nextIndex = (startIndex + 1) % this.devices.length;
-    let found = false;
+  if (!this.hass || this.isDragging) return; // Don't switch while dragging
+  
+  const startIndex = this.currentDeviceIndex;
+  let nextIndex = (startIndex + 1) % this.devices.length;
+  let found = false;
+  
+  for (let i = 0; i < this.devices.length; i++) {
+    const device = this.devices[nextIndex];
+    const entity = this.hass.states[device.control_entity || device.entity];
     
-    for (let i = 0; i < this.devices.length; i++) {
-      const device = this.devices[nextIndex];
-      const entity = this.hass.states[device.entity];
-      if (entity && (entity.state === "on" || entity.state === "playing")) {
-        this.currentDeviceIndex = nextIndex;
-        found = true;
-        break;
-      }
-      nextIndex = (nextIndex + 1) % this.devices.length;
+    if (entity && (entity.state === "on" || entity.state === "playing")) {
+      this.currentDeviceIndex = nextIndex;
+      found = true;
+      break;
     }
-    
-    if (!found) {
-      this.currentDeviceIndex = -1;
-    }
-    
-    this.updateSliderValue();
-    this.vibrate();
-    this.requestUpdate();
+    nextIndex = (nextIndex + 1) % this.devices.length;
   }
+  
+  if (!found) {
+    this.currentDeviceIndex = -1;
+  }
+  
+  this.updateSliderValue();
+  this.vibrate();
+  this.requestUpdate();
+}
 
   private handleChipClick(index: number): void {
     if (!this.hass) return;
@@ -383,29 +384,34 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private getChipColor(entity: string): string {
-    if (!this.hass) return "#353535";
+  if (!this.hass) return "rgba(0, 0, 0, 0.2)";
+  
+  const stateObj = this.hass.states[entity];
+  if (!stateObj || (stateObj.state !== "on" && stateObj.state !== "playing")) {
+    return "rgba(0, 0, 0, 0.2)"; // Semi-transparent dark when off
+  }
+  
+  // Device is on - find its configuration to get color
+  const deviceIndex = this.devices.findIndex(d => 
+    d.entity === entity || d.control_entity === entity
+  );
+  
+  if (deviceIndex >= 0) {
+    const device = this.devices[deviceIndex];
     
-    const stateObj = this.hass.states[entity];
-    if (!stateObj || (stateObj.state !== "on" && stateObj.state !== "playing")) {
-      return "#353535";
-    }
-
     // Special handling for lights with RGB
-    if (entity.includes('light') && stateObj.attributes.rgb_color) {
+    if (device.color === 'light-color' && entity.includes('light') && stateObj.attributes.rgb_color) {
       return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
     }
-
-    // Return device color
-    const deviceIndex = this.devices.findIndex(d => d.entity === entity);
-    return deviceIndex >= 0 && this.devices[deviceIndex].color ? 
-      this.devices[deviceIndex].color : "#353535";
-  }
-
-  private vibrate(): void {
-    if (this._config?.haptic_feedback !== false && "vibrate" in navigator) {
-      navigator.vibrate(50);
+    
+    // Return configured color
+    if (device.color && device.color !== 'light-color') {
+      return device.color;
     }
   }
+  
+  return "#FDD835"; // Default yellow if no color specified
+}
 
   // Circular slider methods
   private degreesToRadians(degrees: number): number {
@@ -423,20 +429,25 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private angleToValue(angle: number): number {
-    let normalizedAngle = this.normalizeAngle(angle);
-    let normalizedStart = this.normalizeAngle(this.startAngle);
-    
-    let angleFromStart = normalizedAngle - normalizedStart;
-    if (angleFromStart < 0) angleFromStart += 360;
-    
-    if (angleFromStart > this.totalAngle) {
-      let distToStart = Math.min(angleFromStart, 360 - angleFromStart);
-      let distToEnd = Math.min(Math.abs(angleFromStart - this.totalAngle), 360 - Math.abs(angleFromStart - this.totalAngle));
-      return distToStart < distToEnd ? 0 : 1;
-    }
-    
-    return angleFromStart / this.totalAngle;
+  let normalizedAngle = this.normalizeAngle(angle);
+  let normalizedStart = this.normalizeAngle(this.startAngle);
+  
+  let angleFromStart = normalizedAngle - normalizedStart;
+  if (angleFromStart < 0) angleFromStart += 360;
+  
+  if (angleFromStart > this.totalAngle) {
+    let distToStart = Math.min(angleFromStart, 360 - angleFromStart);
+    let distToEnd = Math.min(
+      Math.abs(angleFromStart - this.totalAngle), 
+      360 - Math.abs(angleFromStart - this.totalAngle)
+    );
+    return distToStart < distToEnd ? 0 : 1;
   }
+  
+  // Clamp the value between 0 and 1
+  const value = angleFromStart / this.totalAngle;
+  return Math.max(0, Math.min(1, value));
+}
 
   private valueToAngle(value: number): number {
     return this.startAngle + (value * this.totalAngle);
@@ -469,19 +480,19 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private handlePointerDown(e: PointerEvent): void {
-    const svg = e.currentTarget as SVGElement;
-    if (!svg) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
-    this.isDragging = true;
-    this.actionTaken = true;
-    
-    svg.setPointerCapture(e.pointerId);
-    
-    this.handlePointerMove(e);
-  }
+  const svg = e.currentTarget as SVGElement;
+  if (!svg || this.currentDeviceIndex === -1) return;
+  
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation(); // Stop all event propagation
+  
+  this.isDragging = true;
+  this.actionTaken = true;
+  
+  svg.setPointerCapture(e.pointerId);
+  this.handlePointerMove(e);
+}
 
   private handlePointerMove(e: PointerEvent): void {
     if (!this.isDragging || !this.actionTaken) return;
@@ -648,8 +659,10 @@ export class RoomCard extends LitElement implements LovelaceCard {
         </div>
 
         <div class="icon-section">
-          <div class="icon-container" @click=${this.handleIconClick}>
-            <div class="icon-background" style="background-color: ${iconBackgroundColor}">
+          <div class="icon-container">
+            <div class="icon-background" 
+                style="background-color: ${iconBackgroundColor}"
+                @click=${this.handleIconClick}>
               <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
             </div>
             
@@ -695,15 +708,15 @@ export class RoomCard extends LitElement implements LovelaceCard {
           ${this.devices.map((device, index) => {
             if (device.show_chip === false) return '';
             
-            const entity = this.hass.states[device.entity];
-            const controlEntity = this.hass.states[device.control_entity || device.entity];
-            const isOn = controlEntity && (controlEntity.state === "on" || controlEntity.state === "playing");
-            const chipColor = this.getChipColor(device, isOn);
+            const controlEntity = device.control_entity || device.entity;
+            const entity = this.hass!.states[controlEntity];
+            const isOn = entity && (entity.state === "on" || entity.state === "playing");
+            const chipColor = this.getChipColor(controlEntity);
             
             return html`
               <div
-                class="chip ${!entity ? 'unavailable' : ''}"
-                style="background-color: ${chipColor}; color: ${isOn ? 'white' : '#DBDBDB'}"
+                class="chip ${!entity ? 'unavailable' : ''} ${isOn ? 'on' : 'off'}"
+                style="background-color: ${chipColor}; color: ${isOn ? 'white' : 'rgba(255, 255, 255, 0.6)'}"
                 @click=${() => this.handleChipClick(index)}
               >
                 <ha-icon icon="${device.icon}"></ha-icon>
