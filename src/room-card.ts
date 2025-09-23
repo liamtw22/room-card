@@ -833,8 +833,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
         align-items: center;
         justify-content: flex-start;
         position: relative;
-        padding-top: 20px;  /* Reduced from 37px to move up */
-        padding-left: 12px; /* Added left padding */
+        padding-top: 45px; 
+        padding-left: -2px;
         overflow: hidden;
       }
 
@@ -916,7 +916,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
         grid-area: chips;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 4px;
         margin-right: 8px;
         margin-top: 8px;
       }
@@ -925,8 +925,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 40px;
-        width: 40px;
+        height: 38px;
+        width: 38px;
         border-radius: 50%;
         cursor: pointer;
         transition: all 0.3s ease;
