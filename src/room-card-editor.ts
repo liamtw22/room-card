@@ -57,7 +57,15 @@ export class RoomCardEditor extends LitElement {
     `;
   }
 
+  private _getAreaName(areaId: string): string {
+    if (!this.hass || !areaId) return areaId;
+    const area = this.hass.areas[areaId];
+    return area?.name || areaId;
+  }
+
   private _renderBasicSection(): TemplateResult {
+    const areaName = this._getAreaName(this._config!.area);
+    
     return html`
       <ha-expansion-panel
         .header=${'Basic Configuration'}
@@ -76,13 +84,18 @@ export class RoomCardEditor extends LitElement {
               detail: { value: e.detail.value }
             })}
           ></ha-selector>
+          
+          <div class="info-row">
+            <span class="info-label">Selected Area:</span>
+            <span class="info-value">${areaName}</span>
+          </div>
 
           <ha-textfield
             label="Display Name (Optional)"
             .value=${this._config!.name || ''}
             .configValue=${'name'}
             @input=${this._valueChanged}
-            helper="Leave empty to use the area name"
+            helper="Leave empty to use the area name: ${areaName}"
           ></ha-textfield>
 
           <ha-formfield label="Haptic Feedback">
@@ -98,14 +111,12 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _renderAppearanceSection(): TemplateResult {
-    const iconColorType = typeof this._config!.icon_color === 'object' ? 
-      'temperature' : (this._config!.icon_color === 'auto' ? 'auto' : 'custom');
-    
-    const backgroundColorType = typeof this._config!.background_color === 'object' ?
-      'entity' : (this._config!.background_color ? 'custom' : 'default');
-    
-    const iconCircleColorType = typeof this._config!.icon_circle_color === 'object' ?
-      'entity' : (this._config!.icon_circle_color ? 'custom' : 'default');
+    const backgroundType = typeof this._config!.background === 'object' && this._config!.background?.entity ? 
+      'entity' : 'static';
+    const iconColorType = typeof this._config!.icon_color === 'object' && this._config!.icon_color?.entity ? 
+      'entity' : 'static';
+    const iconBgColorType = typeof this._config!.icon_background === 'object' && this._config!.icon_background?.entity ? 
+      'entity' : 'static';
 
     return html`
       <ha-expansion-panel
@@ -126,167 +137,244 @@ export class RoomCardEditor extends LitElement {
             })}
           ></ha-selector>
 
+          <!-- Card Background Configuration -->
+          <div class="color-config-section">
+            <label>Card Background</label>
+            <ha-select
+              naturalMenuWidth
+              fixedMenuPosition
+              label="Background Type"
+              .value=${backgroundType}
+              @selected=${(e: any) => this._handleBackgroundTypeChange(e.target.value)}
+              @closed=${(e: Event) => e.stopPropagation()}
+            >
+              <ha-list-item value="static">Static Color</ha-list-item>
+              <ha-list-item value="entity">Entity State</ha-list-item>
+            </ha-select>
+
+            ${backgroundType === 'static' ? html`
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ color_rgb: {} }}
+                .value=${this._parseColorToRGB((this._config!.background as string) || '#1a1a1a')}
+                .label=${'Background Color'}
+                @value-changed=${(e: any) => {
+                  const rgb = e.detail.value;
+                  const hex = this._rgbToHex(rgb);
+                  this._updateConfig({ background: hex });
+                }}
+              ></ha-selector>
+            ` : html`
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ entity: {} }}
+                .value=${(this._config!.background as any)?.entity || ''}
+                .label=${'Background Entity'}
+                @value-changed=${(e: any) => {
+                  const background = this._config!.background as any || {};
+                  this._updateConfig({ 
+                    background: { 
+                      ...background,
+                      entity: e.detail.value 
+                    }
+                  });
+                }}
+              ></ha-selector>
+              ${(this._config!.background as any)?.entity ? 
+                this._renderStateColors('background', (this._config!.background as any)?.states || {}) : ''}
+            `}
+          </div>
+
           <!-- Icon Color Configuration -->
-          <ha-select
-            naturalMenuWidth
-            fixedMenuPosition
-            label="Icon Color Type"
-            .value=${iconColorType}
-            @selected=${(e: any) => this._handleIconColorTypeChange(e.target.value)}
-            @closed=${(e: Event) => e.stopPropagation()}
-          >
-            <ha-list-item value="auto">Automatic</ha-list-item>
-            <ha-list-item value="custom">Custom Color</ha-list-item>
-            <ha-list-item value="temperature">Temperature-based</ha-list-item>
-          </ha-select>
+          <div class="color-config-section">
+            <label>Icon Color</label>
+            <ha-select
+              naturalMenuWidth
+              fixedMenuPosition
+              label="Icon Color Type"
+              .value=${iconColorType}
+              @selected=${(e: any) => this._handleIconColorTypeChange(e.target.value)}
+              @closed=${(e: Event) => e.stopPropagation()}
+            >
+              <ha-list-item value="static">Static Color</ha-list-item>
+              <ha-list-item value="entity">Entity State</ha-list-item>
+            </ha-select>
 
-          ${iconColorType === 'custom' ? html`
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ color_rgb: {} }}
-              .value=${this._parseColorToRGB(this._config!.icon_color as string)}
-              .label=${'Icon Color'}
-              @value-changed=${(e: any) => {
-                const rgb = e.detail.value;
-                const hex = this._rgbToHex(rgb);
-                this._valueChanged({
-                  target: { configValue: 'icon_color' },
-                  detail: { value: hex }
-                });
-              }}
-            ></ha-selector>
-          ` : ''}
+            ${iconColorType === 'static' ? html`
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ color_rgb: {} }}
+                .value=${this._parseColorToRGB((this._config!.icon_color as string) || '#FFFFFF')}
+                .label=${'Icon Color'}
+                @value-changed=${(e: any) => {
+                  const rgb = e.detail.value;
+                  const hex = this._rgbToHex(rgb);
+                  this._updateConfig({ icon_color: hex });
+                }}
+              ></ha-selector>
+            ` : html`
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ entity: {} }}
+                .value=${(this._config!.icon_color as any)?.entity || ''}
+                .label=${'Icon Color Entity'}
+                @value-changed=${(e: any) => {
+                  const iconColor = this._config!.icon_color as any || {};
+                  this._updateConfig({ 
+                    icon_color: { 
+                      ...iconColor,
+                      entity: e.detail.value 
+                    }
+                  });
+                }}
+              ></ha-selector>
+              ${(this._config!.icon_color as any)?.entity ? 
+                this._renderStateColors('icon_color', (this._config!.icon_color as any)?.states || {}) : ''}
+            `}
+          </div>
 
-          ${iconColorType === 'temperature' ? html`
-            <div class="state-colors">
-              <label>Temperature-based Icon Colors</label>
-              ${['cold', 'cool', 'comfortable', 'warm', 'hot'].map(state => html`
-                <ha-selector
-                  .hass=${this.hass}
-                  .selector=${{ color_rgb: {} }}
-                  .value=${this._parseColorToRGB(
-                    (this._config!.icon_color as any)?.[state] || this._getDefaultTemperatureColor(state)
-                  )}
-                  .label=${state.charAt(0).toUpperCase() + state.slice(1)}
-                  @value-changed=${(e: any) => {
-                    const rgb = e.detail.value;
-                    const hex = this._rgbToHex(rgb);
-                    const iconColor = typeof this._config!.icon_color === 'object' ? 
-                      { ...this._config!.icon_color } : {};
-                    iconColor[state] = hex;
-                    this._updateConfig({ icon_color: iconColor });
-                  }}
-                ></ha-selector>
-              `)}
-            </div>
-          ` : ''}
+          <!-- Icon Background Configuration -->
+          <div class="color-config-section">
+            <label>Icon Background</label>
+            <ha-select
+              naturalMenuWidth
+              fixedMenuPosition
+              label="Icon Background Type"
+              .value=${iconBgColorType}
+              @selected=${(e: any) => this._handleIconBgTypeChange(e.target.value)}
+              @closed=${(e: Event) => e.stopPropagation()}
+            >
+              <ha-list-item value="static">Static Color</ha-list-item>
+              <ha-list-item value="entity">Entity State</ha-list-item>
+            </ha-select>
 
-          <!-- Card Background Color -->
-          <ha-select
-            naturalMenuWidth
-            fixedMenuPosition
-            label="Card Background Color"
-            .value=${backgroundColorType}
-            @selected=${(e: any) => this._handleBackgroundColorTypeChange(e.target.value)}
-            @closed=${(e: Event) => e.stopPropagation()}
-          >
-            <ha-list-item value="default">Default (Temperature-based)</ha-list-item>
-            <ha-list-item value="custom">Custom Color</ha-list-item>
-            <ha-list-item value="entity">Based on Entity</ha-list-item>
-          </ha-select>
-
-          ${backgroundColorType === 'custom' ? html`
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ color_rgb: {} }}
-              .value=${this._parseColorToRGB(this._config!.background_color as string)}
-              .label=${'Background Color'}
-              @value-changed=${(e: any) => {
-                const rgb = e.detail.value;
-                const hex = this._rgbToHex(rgb);
-                this._valueChanged({
-                  target: { configValue: 'background_color' },
-                  detail: { value: hex }
-                });
-              }}
-            ></ha-selector>
-          ` : ''}
-
-          ${backgroundColorType === 'entity' ? html`
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ 
-                entity: {
-                  filter: [
-                    { domain: 'light' },
-                    { domain: 'sensor' }
-                  ]
-                }
-              }}
-              .value=${(this._config!.background_color as any)?.entity || ''}
-              .label=${'Background Color Entity'}
-              @value-changed=${(e: any) => {
-                this._updateConfig({ 
-                  background_color: { entity: e.detail.value }
-                });
-              }}
-            ></ha-selector>
-          ` : ''}
-
-          <!-- Icon Circle Color -->
-          <ha-select
-            naturalMenuWidth
-            fixedMenuPosition
-            label="Icon Circle Background Color"
-            .value=${iconCircleColorType}
-            @selected=${(e: any) => this._handleIconCircleColorTypeChange(e.target.value)}
-            @closed=${(e: Event) => e.stopPropagation()}
-          >
-            <ha-list-item value="default">Default</ha-list-item>
-            <ha-list-item value="custom">Custom Color</ha-list-item>
-            <ha-list-item value="entity">Based on Entity</ha-list-item>
-          </ha-select>
-
-          ${iconCircleColorType === 'custom' ? html`
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ color_rgb: {} }}
-              .value=${this._parseColorToRGB(this._config!.icon_circle_color as string)}
-              .label=${'Icon Circle Color'}
-              @value-changed=${(e: any) => {
-                const rgb = e.detail.value;
-                const hex = this._rgbToHex(rgb);
-                this._valueChanged({
-                  target: { configValue: 'icon_circle_color' },
-                  detail: { value: hex }
-                });
-              }}
-            ></ha-selector>
-          ` : ''}
-
-          ${iconCircleColorType === 'entity' ? html`
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ 
-                entity: {
-                  filter: [
-                    { domain: 'light' },
-                    { domain: 'sensor' }
-                  ]
-                }
-              }}
-              .value=${(this._config!.icon_circle_color as any)?.entity || ''}
-              .label=${'Icon Circle Color Entity'}
-              @value-changed=${(e: any) => {
-                this._updateConfig({ 
-                  icon_circle_color: { entity: e.detail.value }
-                });
-              }}
-            ></ha-selector>
-          ` : ''}
+            ${iconBgColorType === 'static' ? html`
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ color_rgb: {} }}
+                .value=${this._parseColorToRGB((this._config!.icon_background as string) || '#333333')}
+                .label=${'Icon Background Color'}
+                @value-changed=${(e: any) => {
+                  const rgb = e.detail.value;
+                  const hex = this._rgbToHex(rgb);
+                  this._updateConfig({ icon_background: hex });
+                }}
+              ></ha-selector>
+            ` : html`
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ entity: {} }}
+                .value=${(this._config!.icon_background as any)?.entity || ''}
+                .label=${'Icon Background Entity'}
+                @value-changed=${(e: any) => {
+                  const iconBg = this._config!.icon_background as any || {};
+                  this._updateConfig({ 
+                    icon_background: { 
+                      ...iconBg,
+                      entity: e.detail.value 
+                    }
+                  });
+                }}
+              ></ha-selector>
+              ${(this._config!.icon_background as any)?.entity ? 
+                this._renderStateColors('icon_background', (this._config!.icon_background as any)?.states || {}) : ''}
+            `}
+          </div>
         </div>
       </ha-expansion-panel>
     `;
+  }
+
+  private _renderStateColors(configKey: string, states: Record<string, string>): TemplateResult {
+    const entity = (this._config![configKey] as any)?.entity;
+    const entityStates = this._getEntityStates(entity);
+
+    return html`
+      <div class="state-colors">
+        <label>State Colors</label>
+        <div class="state-list">
+          ${entityStates.map(state => html`
+            <div class="state-item">
+              <span class="state-label">${state}</span>
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ color_rgb: {} }}
+                .value=${this._parseColorToRGB(states[state] || '#808080')}
+                @value-changed=${(e: any) => {
+                  const rgb = e.detail.value;
+                  const hex = this._rgbToHex(rgb);
+                  const configValue = this._config![configKey] as any || {};
+                  const newStates = { ...configValue.states };
+                  newStates[state] = hex;
+                  this._updateConfig({ 
+                    [configKey]: {
+                      ...configValue,
+                      states: newStates
+                    }
+                  });
+                }}
+              ></ha-selector>
+            </div>
+          `)}
+          <div class="add-state">
+            <ha-textfield
+              label="Add Custom State"
+              id="${configKey}-new-state"
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter') {
+                  this._addCustomState(configKey);
+                }
+              }}
+            ></ha-textfield>
+            <ha-icon-button
+              @click=${() => this._addCustomState(configKey)}
+              .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
+            ></ha-icon-button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private _addCustomState(configKey: string): void {
+    const input = this.shadowRoot?.getElementById(`${configKey}-new-state`) as any;
+    if (input && input.value) {
+      const state = input.value.trim();
+      if (state) {
+        const configValue = this._config![configKey] as any || {};
+        const states = { ...configValue.states };
+        states[state] = '#808080';
+        this._updateConfig({ 
+          [configKey]: {
+            ...configValue,
+            states
+          }
+        });
+        input.value = '';
+      }
+    }
+  }
+
+  private _getEntityStates(entityId: string): string[] {
+    if (!entityId || !this.hass) return ['on', 'off'];
+    
+    const domain = entityId.split('.')[0];
+    const commonStates = ['on', 'off', 'unavailable', 'unknown'];
+    
+    // Add domain-specific states
+    const domainStates: Record<string, string[]> = {
+      light: ['on', 'off'],
+      switch: ['on', 'off'],
+      fan: ['on', 'off'],
+      cover: ['open', 'closed', 'opening', 'closing'],
+      lock: ['locked', 'unlocked'],
+      climate: ['heat', 'cool', 'auto', 'off', 'dry', 'fan_only'],
+      media_player: ['playing', 'paused', 'idle', 'off'],
+      vacuum: ['cleaning', 'docked', 'idle', 'paused', 'returning'],
+      alarm_control_panel: ['disarmed', 'armed_home', 'armed_away', 'armed_night', 'triggered']
+    };
+    
+    return domainStates[domain] || commonStates;
   }
 
   private _renderTemperatureSection(): TemplateResult {
@@ -297,6 +385,8 @@ export class RoomCardEditor extends LitElement {
       warm: { min: 78, max: 85 },
       hot: { min: 85, max: 150 }
     };
+
+    const useTempBackground = this._config!.use_temperature_background !== false;
 
     return html`
       <ha-expansion-panel
@@ -343,24 +433,6 @@ export class RoomCardEditor extends LitElement {
             })}
           ></ha-selector>
 
-          <!-- Weather Entity using proper entity selector -->
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ 
-              entity: {
-                filter: {
-                  domain: 'weather'
-                }
-              }
-            }}
-            .value=${this._config!.weather_entity || ''}
-            .label=${'Weather Entity (Optional)'}
-            @value-changed=${(e: any) => this._valueChanged({
-              target: { configValue: 'weather_entity' },
-              detail: { value: e.detail.value }
-            })}
-          ></ha-selector>
-
           <div class="switches">
             <ha-formfield label="Show Temperature">
               <ha-switch
@@ -374,6 +446,14 @@ export class RoomCardEditor extends LitElement {
               <ha-switch
                 .checked=${this._config!.show_humidity !== false}
                 .configValue=${'show_humidity'}
+                @change=${this._valueChanged}
+              ></ha-switch>
+            </ha-formfield>
+
+            <ha-formfield label="Use Temperature-based Background">
+              <ha-switch
+                .checked=${useTempBackground}
+                .configValue=${'use_temperature_background'}
                 @change=${this._valueChanged}
               ></ha-switch>
             </ha-formfield>
@@ -392,46 +472,48 @@ export class RoomCardEditor extends LitElement {
             <ha-list-item value="F">Fahrenheit</ha-list-item>
           </ha-select>
 
-          <div class="temperature-colors-section">
-            <label>Background Colors & Temperature Ranges</label>
-            ${['cold', 'cool', 'comfortable', 'warm', 'hot'].map(state => html`
-              <div class="temp-range-item">
-                <div class="temp-range-header">
-                  <span>${state.charAt(0).toUpperCase() + state.slice(1)}</span>
-                </div>
-                <div class="temp-range-controls">
-                  <ha-selector
-                    .hass=${this.hass}
-                    .selector=${{ color_rgb: {} }}
-                    .value=${this._parseColorToRGB(
-                      this._config!.background_colors?.[state] || this._getDefaultBackgroundColor(state)
-                    )}
-                    @value-changed=${(e: any) => {
-                      const rgb = e.detail.value;
-                      const hex = this._rgbToHex(rgb);
-                      const backgroundColors = { ...this._config!.background_colors };
-                      backgroundColors[state] = hex;
-                      this._updateConfig({ background_colors: backgroundColors });
-                    }}
-                  ></ha-selector>
-                  <div class="temp-inputs">
-                    <ha-textfield
-                      label="Min °${this._config!.temperature_unit || 'F'}"
-                      type="number"
-                      .value=${tempRanges[state].min}
-                      @input=${(e: any) => this._updateTempRange(state, 'min', parseFloat(e.target.value))}
-                    ></ha-textfield>
-                    <ha-textfield
-                      label="Max °${this._config!.temperature_unit || 'F'}"
-                      type="number"
-                      .value=${tempRanges[state].max}
-                      @input=${(e: any) => this._updateTempRange(state, 'max', parseFloat(e.target.value))}
-                    ></ha-textfield>
+          ${useTempBackground ? html`
+            <div class="temperature-colors-section">
+              <label>Temperature-based Background Colors & Ranges</label>
+              ${['cold', 'cool', 'comfortable', 'warm', 'hot'].map(state => html`
+                <div class="temp-range-item">
+                  <div class="temp-range-header">
+                    <span>${state.charAt(0).toUpperCase() + state.slice(1)}</span>
+                  </div>
+                  <div class="temp-range-controls">
+                    <ha-selector
+                      .hass=${this.hass}
+                      .selector=${{ color_rgb: {} }}
+                      .value=${this._parseColorToRGB(
+                        this._config!.background_colors?.[state] || this._getDefaultBackgroundColor(state)
+                      )}
+                      @value-changed=${(e: any) => {
+                        const rgb = e.detail.value;
+                        const hex = this._rgbToHex(rgb);
+                        const backgroundColors = { ...this._config!.background_colors };
+                        backgroundColors[state] = hex;
+                        this._updateConfig({ background_colors: backgroundColors });
+                      }}
+                    ></ha-selector>
+                    <div class="temp-inputs">
+                      <ha-textfield
+                        label="Min °${this._config!.temperature_unit || 'F'}"
+                        type="number"
+                        .value=${tempRanges[state].min}
+                        @input=${(e: any) => this._updateTempRange(state, 'min', parseFloat(e.target.value))}
+                      ></ha-textfield>
+                      <ha-textfield
+                        label="Max °${this._config!.temperature_unit || 'F'}"
+                        type="number"
+                        .value=${tempRanges[state].max}
+                        @input=${(e: any) => this._updateTempRange(state, 'max', parseFloat(e.target.value))}
+                      ></ha-textfield>
+                    </div>
                   </div>
                 </div>
-              </div>
-            `)}
-          </div>
+              `)}
+            </div>
+          ` : ''}
         </div>
       </ha-expansion-panel>
     `;
@@ -679,28 +761,28 @@ export class RoomCardEditor extends LitElement {
     this._updateConfig({ temperature_ranges: ranges });
   }
 
-  private _handleBackgroundColorTypeChange(type: string): void {
-    let backgroundColor: any = undefined;
-    
-    if (type === 'custom') {
-      backgroundColor = '#FFFFFF';
-    } else if (type === 'entity') {
-      backgroundColor = { entity: '' };
+  private _handleBackgroundTypeChange(type: string): void {
+    if (type === 'static') {
+      this._updateConfig({ background: '#1a1a1a' });
+    } else {
+      this._updateConfig({ background: { entity: '', states: {} } });
     }
-    
-    this._updateConfig({ background_color: backgroundColor });
   }
 
-  private _handleIconCircleColorTypeChange(type: string): void {
-    let iconCircleColor: any = undefined;
-    
-    if (type === 'custom') {
-      iconCircleColor = '#333333';
-    } else if (type === 'entity') {
-      iconCircleColor = { entity: '' };
+  private _handleIconColorTypeChange(type: string): void {
+    if (type === 'static') {
+      this._updateConfig({ icon_color: '#FFFFFF' });
+    } else {
+      this._updateConfig({ icon_color: { entity: '', states: {} } });
     }
-    
-    this._updateConfig({ icon_circle_color: iconCircleColor });
+  }
+
+  private _handleIconBgTypeChange(type: string): void {
+    if (type === 'static') {
+      this._updateConfig({ icon_background: '#333333' });
+    } else {
+      this._updateConfig({ icon_background: { entity: '', states: {} } });
+    }
   }
 
   private _parseColorToRGB(color: string | undefined): number[] {
@@ -729,17 +811,6 @@ export class RoomCardEditor extends LitElement {
     }).join('');
   }
 
-  private _getDefaultTemperatureColor(state: string): string {
-    const defaults: Record<string, string> = {
-      cold: '#3B82F6',
-      cool: '#06B6D4',
-      comfortable: '#10B981',
-      warm: '#F59E0B',
-      hot: '#EF4444'
-    };
-    return defaults[state] || '#10B981';
-  }
-
   private _getDefaultBackgroundColor(state: string): string {
     const defaults: Record<string, string> = {
       cold: '#CEB2F5',
@@ -749,30 +820,6 @@ export class RoomCardEditor extends LitElement {
       hot: '#F4A8A3'
     };
     return defaults[state] || '#CDE3DB';
-  }
-
-  private _handleIconColorTypeChange(type: string): void {
-    let iconColor: any;
-    
-    switch (type) {
-      case 'auto':
-        iconColor = 'auto';
-        break;
-      case 'custom':
-        iconColor = '#FDD835';
-        break;
-      case 'temperature':
-        iconColor = {
-          cold: this._getDefaultTemperatureColor('cold'),
-          cool: this._getDefaultTemperatureColor('cool'),
-          comfortable: this._getDefaultTemperatureColor('comfortable'),
-          warm: this._getDefaultTemperatureColor('warm'),
-          hot: this._getDefaultTemperatureColor('hot')
-        };
-        break;
-    }
-    
-    this._updateConfig({ icon_color: iconColor });
   }
 
   private _valueChanged(ev: any): void {
@@ -935,6 +982,24 @@ export class RoomCardEditor extends LitElement {
         padding: 16px;
       }
 
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        background: var(--secondary-background-color);
+        border-radius: 4px;
+      }
+
+      .info-label {
+        font-weight: 500;
+        color: var(--secondary-text-color);
+      }
+
+      .info-value {
+        font-weight: 600;
+      }
+
       ha-formfield {
         display: flex;
         align-items: center;
@@ -967,6 +1032,63 @@ export class RoomCardEditor extends LitElement {
         padding: 16px;
       }
 
+      .color-config-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+      }
+
+      .color-config-section > label {
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+
+      .state-colors {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .state-colors label {
+        font-size: 0.9em;
+        font-weight: 500;
+        color: var(--secondary-text-color);
+      }
+
+      .state-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .state-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .state-label {
+        min-width: 80px;
+        text-transform: capitalize;
+      }
+
+      .add-state {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--divider-color);
+      }
+
+      .add-state ha-textfield {
+        flex: 1;
+      }
+
       .modes-section {
         display: flex;
         flex-direction: column;
@@ -974,7 +1096,6 @@ export class RoomCardEditor extends LitElement {
       }
 
       .modes-section label,
-      .state-colors label,
       .temperature-colors-section label {
         font-size: 0.9em;
         font-weight: 500;

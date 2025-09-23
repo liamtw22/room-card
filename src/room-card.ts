@@ -22,26 +22,58 @@ import './room-card-editor';
 // Types
 export interface RoomCardConfig extends LovelaceCardConfig {
   type: 'custom:room-card';
-  area: string; // Required area instead of entity
-  name?: string;
+  area: string; // Required area ID
+  name?: string; // Optional display name
+  icon?: string;
+  
+  // Color configurations - can be static or entity-based
+  background?: string | EntityColorConfig; // Card background
+  icon_color?: string | EntityColorConfig; // Icon color
+  icon_background?: string | EntityColorConfig; // Icon background circle color
+  
+  // Temperature and humidity sensors
   temperature_sensor?: string;
   humidity_sensor?: string;
-  devices?: DeviceConfig[];
-  background_colors?: TemperatureColors;
+  
+  // Temperature-based background settings
+  use_temperature_background?: boolean; // Enable temperature-based backgrounds
+  background_colors?: TemperatureColors; // Colors for each temperature range
+  temperature_ranges?: TemperatureRanges; // Temperature ranges for each state
+  
+  // Display options
   haptic_feedback?: boolean;
   show_temperature?: boolean;
   show_humidity?: boolean;
   temperature_unit?: 'C' | 'F';
+  
+  // Devices
+  devices?: DeviceConfig[];
+}
+
+export interface EntityColorConfig {
+  entity: string;
+  states?: Record<string, string>; // Map of state values to colors
+}
+
+export interface TemperatureRanges {
+  cold: { min: number; max: number };
+  cool: { min: number; max: number };
+  comfortable: { min: number; max: number };
+  warm: { min: number; max: number };
+  hot: { min: number; max: number };
 }
 
 export interface DeviceConfig {
   entity: string;
+  control_entity?: string; // Optional separate entity for control
   attribute?: string;
   icon?: string;
-  color?: string;
+  color?: string | 'light-color';
   scale?: number;
   type?: 'continuous' | 'discrete';
   modes?: DeviceMode[];
+  show_slider?: boolean;
+  show_chip?: boolean;
 }
 
 export interface DeviceMode {
@@ -104,39 +136,19 @@ export class RoomCard extends LitElement implements LovelaceCard {
   private _initializeDevices(): void {
     if (!this._config) return;
 
-    // Default devices configuration
-    this.devices = this._config.devices || [
-      {
-        entity: `light.${this._config.area.toLowerCase().replace(/\s+/g, '_')}_lights`,
-        attribute: "brightness",
-        icon: "mdi:lightbulb",
-        color: "#FDD835",
-        scale: 255,
-        type: "continuous"
-      },
-      {
-        entity: `media_player.${this._config.area.toLowerCase().replace(/\s+/g, '_')}_speakers`,
-        attribute: "volume_level",
-        icon: "mdi:speaker",
-        color: "#FF9800",
-        scale: 1,
-        type: "continuous"
-      },
-      {
-        entity: `fan.${this._config.area.toLowerCase().replace(/\s+/g, '_')}_purifier`,
-        attribute: "percentage",
-        icon: "mdi:air-purifier",
-        color: "#2196F3",
-        scale: 100,
-        type: "discrete",
-        modes: [
-          { value: 0, label: "Off", percentage: 0 },
-          { value: 0.33, label: "Sleep", percentage: 33 },
-          { value: 0.66, label: "Low", percentage: 66 },
-          { value: 1, label: "High", percentage: 100 }
-        ]
-      }
-    ];
+    // Use configured devices or empty array
+    this.devices = this._config.devices || [];
+  }
+
+  private getAreaName(): string {
+    if (!this.hass || !this._config) return this._config?.area || '';
+    
+    // If a custom name is provided, use it
+    if (this._config.name) return this._config.name;
+    
+    // Otherwise get the area name from Home Assistant
+    const area = this.hass.areas[this._config.area];
+    return area?.name || this._config.area;
   }
 
   protected shouldUpdate(changedProperties: PropertyValues): boolean {
@@ -209,35 +221,60 @@ export class RoomCard extends LitElement implements LovelaceCard {
   private getBackgroundColor(): string {
     if (!this.hass || !this._config) return "#353535";
 
-    // Handle different background types
-    if (this._config.background_type === 'solid') {
-      return this._config.background_color || '#353535';
-    } else if (this._config.background_type === 'entity' && this._config.background_entity) {
-      const entity = this.hass.states[this._config.background_entity];
-      if (entity && this._config.background_state_colors) {
-        return this._config.background_state_colors[entity.state] || '#353535';
+    // Check if temperature background is enabled and configured
+    if (this._config.use_temperature_background !== false && this._config.temperature_sensor) {
+      const tempEntity = this.hass.states[this._config.temperature_sensor];
+      if (tempEntity && tempEntity.state !== 'unavailable') {
+        const temp = parseFloat(tempEntity.state);
+        const unit = this._config.temperature_unit || 'F';
+        
+        // Use configured temperature ranges or defaults
+        const ranges = this._config.temperature_ranges || {
+          cold: { min: -50, max: 45 },
+          cool: { min: 45, max: 65 },
+          comfortable: { min: 65, max: 78 },
+          warm: { min: 78, max: 85 },
+          hot: { min: 85, max: 150 }
+        };
+        
+        // Convert to Fahrenheit if needed for comparison
+        const tempF = unit === 'C' ? (temp * 9/5) + 32 : temp;
+        
+        // Find matching range
+        for (const [state, range] of Object.entries(ranges)) {
+          if (tempF >= range.min && tempF < range.max) {
+            return this._config.background_colors?.[state] || this.getDefaultBackgroundColor(state);
+          }
+        }
       }
-      return '#353535';
     }
     
-    // Default to temperature-based background
-    if (!this._config.temperature_sensor) return "#353535";
+    // Handle static or entity-based background
+    const background = this._config.background;
     
-    const tempEntity = this.hass.states[this._config.temperature_sensor];
-    if (!tempEntity) return "#353535";
+    if (!background) return "#1a1a1a"; // Default dark background
+    
+    if (typeof background === 'string') {
+      return background; // Static color
+    } else if (background.entity) {
+      const entity = this.hass.states[background.entity];
+      if (entity && background.states) {
+        return background.states[entity.state] || "#1a1a1a";
+      }
+    }
+    
+    return "#1a1a1a";
+  }
 
-    const temp = parseFloat(tempEntity.state);
-    const unit = this._config.temperature_unit || 'F';
-    
-    // Convert to Fahrenheit if needed for consistent ranges
-    const tempF = unit === 'C' ? (temp * 9/5) + 32 : temp;
-    
-    if (tempF < 61) return this._config.background_colors?.cold || "#CEB2F5";
-    else if (tempF < 64) return this._config.background_colors?.cool || "#a3d9f5";
-    else if (tempF < 72) return this._config.background_colors?.comfortable || "#cde3db";
-    else if (tempF < 75) return this._config.background_colors?.warm || "#fbd9a0";
-    else if (tempF < 81) return this._config.background_colors?.hot || "#f4a8a3";
-    else return "#df7b74";
+  private getDefaultBackgroundColor(state: string): string {
+    const defaults: Record<string, string> = {
+      cold: '#CEB2F5',
+      cool: '#A3D9F5',
+      comfortable: '#CDE3DB',
+      warm: '#FBD9A0',
+      hot: '#F4A8A3'
+    };
+    return defaults[state] || '#CDE3DB';
   }
 
   private getIconColor(): string {
@@ -247,38 +284,32 @@ export class RoomCard extends LitElement implements LovelaceCard {
     if (!iconColor) return "white";
     
     if (typeof iconColor === 'string') {
-      return iconColor;
+      return iconColor; // Static color
     } else if (iconColor.entity) {
       const entity = this.hass.states[iconColor.entity];
-      if (entity) {
-        if (entity.state === 'on') return 'white';
-        if (entity.state === 'off') return '#7A7A7F';
-        if (iconColor.attribute && entity.attributes[iconColor.attribute]) {
-          return entity.attributes[iconColor.attribute];
-        }
+      if (entity && iconColor.states) {
+        return iconColor.states[entity.state] || "white";
       }
     }
+    
     return "white";
   }
 
   private getIconBackgroundColor(): string {
     if (!this.hass || !this._config) return "rgba(255, 255, 255, 0.2)";
     
-    const iconBgColor = this._config.icon_background_color;
-    if (!iconBgColor) return "rgba(255, 255, 255, 0.2)";
+    const iconBg = this._config.icon_background;
+    if (!iconBg) return "rgba(255, 255, 255, 0.2)";
     
-    if (typeof iconBgColor === 'string') {
-      return iconBgColor;
-    } else if (iconBgColor.entity) {
-      const entity = this.hass.states[iconBgColor.entity];
-      if (entity) {
-        if (entity.state === 'on') return 'rgba(255, 255, 255, 0.2)';
-        if (entity.state === 'off') return 'rgba(122, 122, 127, 0.2)';
-        if (iconBgColor.attribute && entity.attributes[iconBgColor.attribute]) {
-          return entity.attributes[iconBgColor.attribute];
-        }
+    if (typeof iconBg === 'string') {
+      return iconBg; // Static color
+    } else if (iconBg.entity) {
+      const entity = this.hass.states[iconBg.entity];
+      if (entity && iconBg.states) {
+        return iconBg.states[entity.state] || "rgba(255, 255, 255, 0.2)";
       }
     }
+    
     return "rgba(255, 255, 255, 0.2)";
   }
 
@@ -307,33 +338,41 @@ export class RoomCard extends LitElement implements LovelaceCard {
     return parts.join(' / ');
   }
 
-  private handleIconClick(): void {
-  if (!this.hass || this.isDragging) return; // Don't switch while dragging
-  
-  const startIndex = this.currentDeviceIndex;
-  let nextIndex = (startIndex + 1) % this.devices.length;
-  let found = false;
-  
-  for (let i = 0; i < this.devices.length; i++) {
-    const device = this.devices[nextIndex];
-    const entity = this.hass.states[device.control_entity || device.entity];
+  private vibrate(): void {
+    if (!this._config?.haptic_feedback) return;
     
-    if (entity && (entity.state === "on" || entity.state === "playing")) {
-      this.currentDeviceIndex = nextIndex;
-      found = true;
-      break;
+    if (navigator.vibrate) {
+      navigator.vibrate(20);
     }
-    nextIndex = (nextIndex + 1) % this.devices.length;
   }
-  
-  if (!found) {
-    this.currentDeviceIndex = -1;
+
+  private handleIconClick(): void {
+    if (!this.hass || this.isDragging) return; // Don't switch while dragging
+    
+    const startIndex = this.currentDeviceIndex;
+    let nextIndex = (startIndex + 1) % this.devices.length;
+    let found = false;
+    
+    for (let i = 0; i < this.devices.length; i++) {
+      const device = this.devices[nextIndex];
+      const entity = this.hass.states[device.control_entity || device.entity];
+      
+      if (entity && (entity.state === "on" || entity.state === "playing")) {
+        this.currentDeviceIndex = nextIndex;
+        found = true;
+        break;
+      }
+      nextIndex = (nextIndex + 1) % this.devices.length;
+    }
+    
+    if (!found) {
+      this.currentDeviceIndex = -1;
+    }
+    
+    this.updateSliderValue();
+    this.vibrate();
+    this.requestUpdate();
   }
-  
-  this.updateSliderValue();
-  this.vibrate();
-  this.requestUpdate();
-}
 
   private handleChipClick(index: number): void {
     if (!this.hass) return;
@@ -384,34 +423,34 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private getChipColor(entity: string): string {
-  if (!this.hass) return "rgba(0, 0, 0, 0.2)";
-  
-  const stateObj = this.hass.states[entity];
-  if (!stateObj || (stateObj.state !== "on" && stateObj.state !== "playing")) {
-    return "rgba(0, 0, 0, 0.2)"; // Semi-transparent dark when off
-  }
-  
-  // Device is on - find its configuration to get color
-  const deviceIndex = this.devices.findIndex(d => 
-    d.entity === entity || d.control_entity === entity
-  );
-  
-  if (deviceIndex >= 0) {
-    const device = this.devices[deviceIndex];
+    if (!this.hass) return "rgba(0, 0, 0, 0.2)";
     
-    // Special handling for lights with RGB
-    if (device.color === 'light-color' && entity.includes('light') && stateObj.attributes.rgb_color) {
-      return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
+    const stateObj = this.hass.states[entity];
+    if (!stateObj || (stateObj.state !== "on" && stateObj.state !== "playing")) {
+      return "rgba(0, 0, 0, 0.2)"; // Semi-transparent dark when off
     }
     
-    // Return configured color
-    if (device.color && device.color !== 'light-color') {
-      return device.color;
+    // Device is on - find its configuration to get color
+    const deviceIndex = this.devices.findIndex(d => 
+      d.entity === entity || d.control_entity === entity
+    );
+    
+    if (deviceIndex >= 0) {
+      const device = this.devices[deviceIndex];
+      
+      // Special handling for lights with RGB
+      if (device.color === 'light-color' && entity.includes('light') && stateObj.attributes.rgb_color) {
+        return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
+      }
+      
+      // Return configured color
+      if (device.color && device.color !== 'light-color') {
+        return device.color;
+      }
     }
+    
+    return "#FDD835"; // Default yellow if no color specified
   }
-  
-  return "#FDD835"; // Default yellow if no color specified
-}
 
   // Circular slider methods
   private degreesToRadians(degrees: number): number {
@@ -429,25 +468,25 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private angleToValue(angle: number): number {
-  let normalizedAngle = this.normalizeAngle(angle);
-  let normalizedStart = this.normalizeAngle(this.startAngle);
-  
-  let angleFromStart = normalizedAngle - normalizedStart;
-  if (angleFromStart < 0) angleFromStart += 360;
-  
-  if (angleFromStart > this.totalAngle) {
-    let distToStart = Math.min(angleFromStart, 360 - angleFromStart);
-    let distToEnd = Math.min(
-      Math.abs(angleFromStart - this.totalAngle), 
-      360 - Math.abs(angleFromStart - this.totalAngle)
-    );
-    return distToStart < distToEnd ? 0 : 1;
+    let normalizedAngle = this.normalizeAngle(angle);
+    let normalizedStart = this.normalizeAngle(this.startAngle);
+    
+    let angleFromStart = normalizedAngle - normalizedStart;
+    if (angleFromStart < 0) angleFromStart += 360;
+    
+    if (angleFromStart > this.totalAngle) {
+      let distToStart = Math.min(angleFromStart, 360 - angleFromStart);
+      let distToEnd = Math.min(
+        Math.abs(angleFromStart - this.totalAngle), 
+        360 - Math.abs(angleFromStart - this.totalAngle)
+      );
+      return distToStart < distToEnd ? 0 : 1;
+    }
+    
+    // Clamp the value between 0 and 1
+    const value = angleFromStart / this.totalAngle;
+    return Math.max(0, Math.min(1, value));
   }
-  
-  // Clamp the value between 0 and 1
-  const value = angleFromStart / this.totalAngle;
-  return Math.max(0, Math.min(1, value));
-}
 
   private valueToAngle(value: number): number {
     return this.startAngle + (value * this.totalAngle);
@@ -480,19 +519,19 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private handlePointerDown(e: PointerEvent): void {
-  const svg = e.currentTarget as SVGElement;
-  if (!svg || this.currentDeviceIndex === -1) return;
-  
-  e.preventDefault();
-  e.stopPropagation();
-  e.stopImmediatePropagation(); // Stop all event propagation
-  
-  this.isDragging = true;
-  this.actionTaken = true;
-  
-  svg.setPointerCapture(e.pointerId);
-  this.handlePointerMove(e);
-}
+    const svg = e.currentTarget as SVGElement;
+    if (!svg || this.currentDeviceIndex === -1) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation(); // Stop all event propagation
+    
+    this.isDragging = true;
+    this.actionTaken = true;
+    
+    svg.setPointerCapture(e.pointerId);
+    this.handlePointerMove(e);
+  }
 
   private handlePointerMove(e: PointerEvent): void {
     if (!this.isDragging || !this.actionTaken) return;
@@ -610,7 +649,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
     const iconColor = this.getIconColor();
     const iconBackgroundColor = this.getIconBackgroundColor();
     const tempHumidity = this.getTempHumidity();
-    const roomName = this._config.name || this._config.area;
+    const roomName = this.getAreaName();
     
     const hasActiveDevice = this.currentDeviceIndex !== -1;
     const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
@@ -794,7 +833,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
         align-items: center;
         justify-content: flex-start;
         position: relative;
-        padding-top: 37px;
+        padding-top: 20px;  /* Reduced from 37px to move up */
+        padding-left: 12px; /* Added left padding */
         overflow: hidden;
       }
 
@@ -919,8 +959,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
   static getStubConfig(): RoomCardConfig {
     return {
       type: 'custom:room-card',
-      area: 'Living Room',
-      name: 'Living Room',
+      area: '',
+      name: '',
       temperature_sensor: '',
       humidity_sensor: '',
       show_temperature: true,
