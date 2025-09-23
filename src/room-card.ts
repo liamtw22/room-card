@@ -35,16 +35,12 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   temperature_sensor?: string;
   humidity_sensor?: string;
   
-  // Temperature-based background settings
-  use_temperature_background?: boolean; // Enable temperature-based backgrounds
-  background_colors?: TemperatureColors; // Colors for each temperature range
-  temperature_ranges?: TemperatureRanges; // Temperature ranges for each state
-  
   // Display options
   haptic_feedback?: boolean;
   show_temperature?: boolean;
   show_humidity?: boolean;
   temperature_unit?: 'C' | 'F';
+  chip_columns?: number; // Number of chip columns (1-4)
   
   // Devices
   devices?: DeviceConfig[];
@@ -52,15 +48,13 @@ export interface RoomCardConfig extends LovelaceCardConfig {
 
 export interface EntityColorConfig {
   entity: string;
-  states?: Record<string, string>; // Map of state values to colors
+  ranges?: ColorRange[]; // Array of value ranges with colors
 }
 
-export interface TemperatureRanges {
-  cold: { min: number; max: number };
-  cool: { min: number; max: number };
-  comfortable: { min: number; max: number };
-  warm: { min: number; max: number };
-  hot: { min: number; max: number };
+export interface ColorRange {
+  min: number;
+  max: number;
+  color: string;
 }
 
 export interface DeviceConfig {
@@ -68,7 +62,10 @@ export interface DeviceConfig {
   control_entity?: string; // Optional separate entity for control
   attribute?: string;
   icon?: string;
-  color?: string | 'light-color';
+  icon_color?: string; // Icon color on chip/slider
+  color_on?: string | 'light-color'; // Color when on
+  color_off?: string; // Color when off
+  color_unavailable?: string; // Color when unavailable
   scale?: number;
   type?: 'continuous' | 'discrete';
   modes?: DeviceMode[];
@@ -219,80 +216,56 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private getBackgroundColor(): string {
-    if (!this.hass || !this._config) return "#353535";
+    if (!this.hass || !this._config) return "var(--primary-background-color)";
 
-    // Check if temperature background is enabled and configured
-    if (this._config.use_temperature_background !== false && this._config.temperature_sensor) {
-      const tempEntity = this.hass.states[this._config.temperature_sensor];
-      if (tempEntity && tempEntity.state !== 'unavailable') {
-        const temp = parseFloat(tempEntity.state);
-        const unit = this._config.temperature_unit || 'F';
-        
-        // Use configured temperature ranges or defaults
-        const ranges = this._config.temperature_ranges || {
-          cold: { min: -50, max: 45 },
-          cool: { min: 45, max: 65 },
-          comfortable: { min: 65, max: 78 },
-          warm: { min: 78, max: 85 },
-          hot: { min: 85, max: 150 }
-        };
-        
-        // Convert to Fahrenheit if needed for comparison
-        const tempF = unit === 'C' ? (temp * 9/5) + 32 : temp;
-        
-        // Find matching range
-        for (const [state, range] of Object.entries(ranges)) {
-          if (tempF >= range.min && tempF < range.max) {
-            return this._config.background_colors?.[state] || this.getDefaultBackgroundColor(state);
-          }
-        }
-      }
-    }
-    
-    // Handle static or entity-based background
     const background = this._config.background;
     
-    if (!background) return "#1a1a1a"; // Default dark background
+    if (!background) return "var(--primary-background-color)"; // Default to theme background
     
     if (typeof background === 'string') {
       return background; // Static color
     } else if (background.entity) {
       const entity = this.hass.states[background.entity];
-      if (entity && background.states) {
-        return background.states[entity.state] || "#1a1a1a";
+      if (entity && background.ranges) {
+        const value = parseFloat(entity.state);
+        if (!isNaN(value)) {
+          // Find matching range
+          for (const range of background.ranges) {
+            if (value >= range.min && value <= range.max) {
+              return range.color;
+            }
+          }
+        }
       }
     }
     
-    return "#1a1a1a";
-  }
-
-  private getDefaultBackgroundColor(state: string): string {
-    const defaults: Record<string, string> = {
-      cold: '#CEB2F5',
-      cool: '#A3D9F5',
-      comfortable: '#CDE3DB',
-      warm: '#FBD9A0',
-      hot: '#F4A8A3'
-    };
-    return defaults[state] || '#CDE3DB';
+    return "var(--primary-background-color)";
   }
 
   private getIconColor(): string {
-    if (!this.hass || !this._config) return "white";
+    if (!this.hass || !this._config) return "#FFFFFF";
     
     const iconColor = this._config.icon_color;
-    if (!iconColor) return "white";
+    if (!iconColor) return "#FFFFFF";
     
     if (typeof iconColor === 'string') {
       return iconColor; // Static color
     } else if (iconColor.entity) {
       const entity = this.hass.states[iconColor.entity];
-      if (entity && iconColor.states) {
-        return iconColor.states[entity.state] || "white";
+      if (entity && iconColor.ranges) {
+        const value = parseFloat(entity.state);
+        if (!isNaN(value)) {
+          // Find matching range
+          for (const range of iconColor.ranges) {
+            if (value >= range.min && value <= range.max) {
+              return range.color;
+            }
+          }
+        }
       }
     }
     
-    return "white";
+    return "#FFFFFF";
   }
 
   private getIconBackgroundColor(): string {
@@ -305,8 +278,16 @@ export class RoomCard extends LitElement implements LovelaceCard {
       return iconBg; // Static color
     } else if (iconBg.entity) {
       const entity = this.hass.states[iconBg.entity];
-      if (entity && iconBg.states) {
-        return iconBg.states[entity.state] || "rgba(255, 255, 255, 0.2)";
+      if (entity && iconBg.ranges) {
+        const value = parseFloat(entity.state);
+        if (!isNaN(value)) {
+          // Find matching range
+          for (const range of iconBg.ranges) {
+            if (value >= range.min && value <= range.max) {
+              return range.color;
+            }
+          }
+        }
       }
     }
     
@@ -422,34 +403,43 @@ export class RoomCard extends LitElement implements LovelaceCard {
     this.vibrate();
   }
 
-  private getChipColor(entity: string): string {
-    if (!this.hass) return "rgba(0, 0, 0, 0.2)";
+  private getChipColor(device: DeviceConfig, entity: string): string {
+    if (!this.hass) return device.color_unavailable || "rgba(128, 128, 128, 0.5)";
     
     const stateObj = this.hass.states[entity];
-    if (!stateObj || (stateObj.state !== "on" && stateObj.state !== "playing")) {
-      return "rgba(0, 0, 0, 0.2)"; // Semi-transparent dark when off
+    
+    // Handle unavailable state
+    if (!stateObj || stateObj.state === 'unavailable') {
+      return device.color_unavailable || "rgba(128, 128, 128, 0.5)";
     }
     
-    // Device is on - find its configuration to get color
-    const deviceIndex = this.devices.findIndex(d => 
-      d.entity === entity || d.control_entity === entity
-    );
-    
-    if (deviceIndex >= 0) {
-      const device = this.devices[deviceIndex];
-      
-      // Special handling for lights with RGB
-      if (device.color === 'light-color' && entity.includes('light') && stateObj.attributes.rgb_color) {
-        return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
-      }
-      
-      // Return configured color
-      if (device.color && device.color !== 'light-color') {
-        return device.color;
-      }
+    // Handle off state
+    if (stateObj.state !== "on" && stateObj.state !== "playing") {
+      return device.color_off || "rgba(0, 0, 0, 0.2)";
     }
     
-    return "#FDD835"; // Default yellow if no color specified
+    // Handle on state
+    const onColor = device.color_on;
+    
+    // Special handling for lights with RGB
+    if (onColor === 'light-color' && entity.includes('light') && stateObj.attributes.rgb_color) {
+      return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
+    }
+    
+    // Return configured on color
+    return onColor || "#FDD835";
+  }
+
+  private getSliderColor(device: DeviceConfig, entity: any): string {
+    const onColor = device.color_on;
+    
+    // Special handling for lights with RGB
+    if (onColor === 'light-color' && entity?.attributes?.rgb_color) {
+      return `rgb(${entity.attributes.rgb_color.join(",")})`;
+    }
+    
+    // Return configured on color or default
+    return onColor || "#2196F3";
   }
 
   // Circular slider methods
@@ -683,12 +673,22 @@ export class RoomCard extends LitElement implements LovelaceCard {
     // Get slider color
     let sliderColor = '#2196F3';
     if (currentDevice) {
-      if (currentDevice.color === 'light-color' && deviceEntity?.attributes?.rgb_color) {
-        sliderColor = `rgb(${deviceEntity.attributes.rgb_color.join(",")})`;
-      } else if (currentDevice.color && currentDevice.color !== 'light-color') {
-        sliderColor = currentDevice.color;
-      }
+      sliderColor = this.getSliderColor(currentDevice, deviceEntity);
     }
+
+    // Organize devices into columns
+    const chipColumns = this._config.chip_columns || 1;
+    const deviceColumns: DeviceConfig[][] = [];
+    const visibleDevices = this.devices.filter(d => d.show_chip !== false);
+    
+    for (let i = 0; i < chipColumns; i++) {
+      deviceColumns[i] = [];
+    }
+    
+    visibleDevices.forEach((device, index) => {
+      const columnIndex = index % chipColumns;
+      deviceColumns[columnIndex].push(device);
+    });
 
     return html`
       <div class="card-container" style="background-color: ${backgroundColor}">
@@ -734,7 +734,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
                 <!-- Icon on thumb -->
                 <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
                   <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
-                    <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: white;"></ha-icon>
+                    <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_color || 'white'};"></ha-icon>
                   </div>
                 </foreignObject>
               </svg>
@@ -743,25 +743,30 @@ export class RoomCard extends LitElement implements LovelaceCard {
           </div>
         </div>
 
-        <div class="chips-section">
-          ${this.devices.map((device, index) => {
-            if (device.show_chip === false) return '';
-            
-            const controlEntity = device.control_entity || device.entity;
-            const entity = this.hass!.states[controlEntity];
-            const isOn = entity && (entity.state === "on" || entity.state === "playing");
-            const chipColor = this.getChipColor(controlEntity);
-            
-            return html`
-              <div
-                class="chip ${!entity ? 'unavailable' : ''} ${isOn ? 'on' : 'off'}"
-                style="background-color: ${chipColor}; color: ${isOn ? 'white' : 'rgba(255, 255, 255, 0.6)'}"
-                @click=${() => this.handleChipClick(index)}
-              >
-                <ha-icon icon="${device.icon}"></ha-icon>
-              </div>
-            `;
-          })}
+        <div class="chips-container">
+          ${deviceColumns.map((column, colIndex) => html`
+            <div class="chips-column">
+              ${column.map((device) => {
+                const deviceIndex = this.devices.indexOf(device);
+                const controlEntity = device.control_entity || device.entity;
+                const entity = this.hass!.states[controlEntity];
+                const isOn = entity && (entity.state === "on" || entity.state === "playing");
+                const isUnavailable = !entity || entity.state === 'unavailable';
+                const chipColor = this.getChipColor(device, controlEntity);
+                const iconColor = device.icon_color || (isOn ? 'white' : 'rgba(255, 255, 255, 0.6)');
+                
+                return html`
+                  <div
+                    class="chip ${isUnavailable ? 'unavailable' : ''} ${isOn ? 'on' : 'off'}"
+                    style="background-color: ${chipColor}; color: ${iconColor}"
+                    @click=${() => this.handleChipClick(deviceIndex)}
+                  >
+                    <ha-icon icon="${device.icon}"></ha-icon>
+                  </div>
+                `;
+              })}
+            </div>
+          `)}
         </div>
       </div>
     `;
@@ -833,8 +838,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
         align-items: center;
         justify-content: flex-start;
         position: relative;
-        padding-top: 45px; 
-        padding-left: -2px;
+        padding-top: 20px;  /* Reduced from 37px to move up */
+        padding-left: 12px; /* Added left padding */
         overflow: hidden;
       }
 
@@ -916,7 +921,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
         grid-area: chips;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 6px;
         margin-right: 8px;
         margin-top: 8px;
       }
@@ -925,8 +930,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 38px;
-        width: 38px;
+        height: 40px;
+        width: 40px;
         border-radius: 50%;
         cursor: pointer;
         transition: all 0.3s ease;
