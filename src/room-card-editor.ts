@@ -213,8 +213,16 @@ export class RoomCardEditor extends LitElement {
           ` : ''}
 
           ${backgroundColorType === 'entity' ? html`
-            <ha-entity-picker
+            <ha-selector
               .hass=${this.hass}
+              .selector=${{ 
+                entity: {
+                  filter: [
+                    { domain: 'light' },
+                    { domain: 'sensor' }
+                  ]
+                }
+              }}
               .value=${(this._config!.background_color as any)?.entity || ''}
               .label=${'Background Color Entity'}
               @value-changed=${(e: any) => {
@@ -222,7 +230,7 @@ export class RoomCardEditor extends LitElement {
                   background_color: { entity: e.detail.value }
                 });
               }}
-            ></ha-entity-picker>
+            ></ha-selector>
           ` : ''}
 
           <!-- Icon Circle Color -->
@@ -257,8 +265,16 @@ export class RoomCardEditor extends LitElement {
           ` : ''}
 
           ${iconCircleColorType === 'entity' ? html`
-            <ha-entity-picker
+            <ha-selector
               .hass=${this.hass}
+              .selector=${{ 
+                entity: {
+                  filter: [
+                    { domain: 'light' },
+                    { domain: 'sensor' }
+                  ]
+                }
+              }}
               .value=${(this._config!.icon_circle_color as any)?.entity || ''}
               .label=${'Icon Circle Color Entity'}
               @value-changed=${(e: any) => {
@@ -266,7 +282,7 @@ export class RoomCardEditor extends LitElement {
                   icon_circle_color: { entity: e.detail.value }
                 });
               }}
-            ></ha-entity-picker>
+            ></ha-selector>
           ` : ''}
         </div>
       </ha-expansion-panel>
@@ -289,37 +305,61 @@ export class RoomCardEditor extends LitElement {
         @expanded-changed=${(e: any) => this._expandedSections.temperature = e.detail.expanded}
       >
         <div class="section-content">
-          <ha-entity-picker
+          <!-- Temperature Sensor using proper entity selector -->
+          <ha-selector
             .hass=${this.hass}
+            .selector=${{ 
+              entity: {
+                filter: {
+                  domain: 'sensor',
+                  device_class: 'temperature'
+                }
+              }
+            }}
             .value=${this._config!.temperature_sensor || ''}
-            .configValue=${'temperature_sensor'}
-            @value-changed=${this._valueChanged}
-            .includeDomains=${['sensor']}
-            .includeDeviceClasses=${['temperature']}
-            allow-custom-entity
-            label="Temperature Sensor"
-          ></ha-entity-picker>
+            .label=${'Temperature Sensor'}
+            @value-changed=${(e: any) => this._valueChanged({
+              target: { configValue: 'temperature_sensor' },
+              detail: { value: e.detail.value }
+            })}
+          ></ha-selector>
 
-          <ha-entity-picker
+          <!-- Humidity Sensor using proper entity selector -->
+          <ha-selector
             .hass=${this.hass}
+            .selector=${{ 
+              entity: {
+                filter: {
+                  domain: 'sensor',
+                  device_class: 'humidity'
+                }
+              }
+            }}
             .value=${this._config!.humidity_sensor || ''}
-            .configValue=${'humidity_sensor'}
-            @value-changed=${this._valueChanged}
-            .includeDomains=${['sensor']}
-            .includeDeviceClasses=${['humidity']}
-            allow-custom-entity
-            label="Humidity Sensor"
-          ></ha-entity-picker>
+            .label=${'Humidity Sensor'}
+            @value-changed=${(e: any) => this._valueChanged({
+              target: { configValue: 'humidity_sensor' },
+              detail: { value: e.detail.value }
+            })}
+          ></ha-selector>
 
-          <ha-entity-picker
+          <!-- Weather Entity using proper entity selector -->
+          <ha-selector
             .hass=${this.hass}
+            .selector=${{ 
+              entity: {
+                filter: {
+                  domain: 'weather'
+                }
+              }
+            }}
             .value=${this._config!.weather_entity || ''}
-            .configValue=${'weather_entity'}
-            @value-changed=${this._valueChanged}
-            .includeDomains=${['weather']}
-            allow-custom-entity
-            label="Weather Entity (Optional)"
-          ></ha-entity-picker>
+            .label=${'Weather Entity (Optional)'}
+            @value-changed=${(e: any) => this._valueChanged({
+              target: { configValue: 'weather_entity' },
+              detail: { value: e.detail.value }
+            })}
+          ></ha-selector>
 
           <div class="switches">
             <ha-formfield label="Show Temperature">
@@ -438,20 +478,38 @@ export class RoomCardEditor extends LitElement {
               @click=${() => this._removeDevice(index)}
             ></ha-icon-button-arrow-prev>
 
-            <!-- Enhanced Entity Picker with all domains -->
-            <ha-entity-picker
+            <!-- Enhanced Entity Selector using proper ha-selector -->
+            <ha-selector
               .hass=${this.hass}
+              .selector=${{ 
+                entity: {
+                  multiple: false,
+                  filter: [
+                    { domain: 'light' },
+                    { domain: 'switch' },
+                    { domain: 'fan' },
+                    { domain: 'media_player' },
+                    { domain: 'climate' },
+                    { domain: 'cover' },
+                    { domain: 'vacuum' },
+                    { domain: 'sensor' },
+                    { domain: 'camera' },
+                    { domain: 'remote' },
+                    { domain: 'button' },
+                    { domain: 'humidifier' },
+                    { domain: 'valve' },
+                    { domain: 'water_heater' },
+                    { domain: 'group' }
+                  ]
+                }
+              }}
               .value=${device.entity || ''}
-              .configValue=${'entity'}
-              @value-changed=${(e: any) => this._handleDeviceChange(e, index)}
-              .includeDomains=${[
-                'light', 'switch', 'fan', 'media_player', 'climate', 
-                'cover', 'vacuum', 'sensor', 'camera', 'remote', 
-                'button', 'humidifier', 'valve', 'water_heater', 'group'
-              ]}
-              allow-custom-entity
-              label="Entity"
-            ></ha-entity-picker>
+              .label=${'Entity'}
+              @value-changed=${(e: any) => this._handleDeviceChange({
+                target: { configValue: 'entity' },
+                detail: { value: e.detail.value }
+              }, index)}
+            ></ha-selector>
 
             <ha-select
               naturalMenuWidth
