@@ -15,6 +15,24 @@ export class RoomCardEditor extends LitElement {
     devices: false
   };
 
+  // Default icons and colors for different device types
+  private deviceDefaults: Record<string, { icon: string; color: string; attribute: string }> = {
+    light: { icon: 'mdi:lightbulb', color: '#FDD835', attribute: 'brightness' },
+    switch: { icon: 'mdi:toggle-switch', color: '#4CAF50', attribute: 'state' },
+    fan: { icon: 'mdi:fan', color: '#03A9F4', attribute: 'percentage' },
+    media_player: { icon: 'mdi:speaker', color: '#9C27B0', attribute: 'volume_level' },
+    climate: { icon: 'mdi:thermostat', color: '#FF9800', attribute: 'temperature' },
+    cover: { icon: 'mdi:window-shutter', color: '#795548', attribute: 'position' },
+    vacuum: { icon: 'mdi:robot-vacuum', color: '#607D8B', attribute: 'battery_level' },
+    sensor: { icon: 'mdi:gauge', color: '#00BCD4', attribute: 'state' },
+    camera: { icon: 'mdi:camera', color: '#FF5722', attribute: 'state' },
+    remote: { icon: 'mdi:remote', color: '#3F51B5', attribute: 'state' },
+    button: { icon: 'mdi:button-cursor', color: '#673AB7', attribute: 'state' },
+    humidifier: { icon: 'mdi:air-humidifier', color: '#00ACC1', attribute: 'humidity' },
+    valve: { icon: 'mdi:valve', color: '#8BC34A', attribute: 'state' },
+    water_heater: { icon: 'mdi:water-boiler', color: '#F44336', attribute: 'temperature' }
+  };
+
   public setConfig(config: RoomCardConfig): void {
     this._config = config;
     this._loadHelpers();
@@ -40,8 +58,6 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _renderBasicSection(): TemplateResult {
-    const areas = this._getAreas();
-    
     return html`
       <ha-expansion-panel
         .header=${'Basic Configuration'}
@@ -84,6 +100,12 @@ export class RoomCardEditor extends LitElement {
   private _renderAppearanceSection(): TemplateResult {
     const iconColorType = typeof this._config!.icon_color === 'object' ? 
       'temperature' : (this._config!.icon_color === 'auto' ? 'auto' : 'custom');
+    
+    const backgroundColorType = typeof this._config!.background_color === 'object' ?
+      'entity' : (this._config!.background_color ? 'custom' : 'default');
+    
+    const iconCircleColorType = typeof this._config!.icon_circle_color === 'object' ?
+      'entity' : (this._config!.icon_circle_color ? 'custom' : 'default');
 
     return html`
       <ha-expansion-panel
@@ -92,7 +114,7 @@ export class RoomCardEditor extends LitElement {
         @expanded-changed=${(e: any) => this._expandedSections.appearance = e.detail.expanded}
       >
         <div class="section-content">
-          <!-- Icon Selector using proper HA selector -->
+          <!-- Icon Selector -->
           <ha-selector
             .hass=${this.hass}
             .selector=${{ icon: {} }}
@@ -104,6 +126,7 @@ export class RoomCardEditor extends LitElement {
             })}
           ></ha-selector>
 
+          <!-- Icon Color Configuration -->
           <ha-select
             naturalMenuWidth
             fixedMenuPosition
@@ -118,7 +141,6 @@ export class RoomCardEditor extends LitElement {
           </ha-select>
 
           ${iconColorType === 'custom' ? html`
-            <!-- RGB Color Selector using proper HA selector -->
             <ha-selector
               .hass=${this.hass}
               .selector=${{ color_rgb: {} }}
@@ -137,7 +159,7 @@ export class RoomCardEditor extends LitElement {
 
           ${iconColorType === 'temperature' ? html`
             <div class="state-colors">
-              <label>Temperature-based Colors</label>
+              <label>Temperature-based Icon Colors</label>
               ${['cold', 'cool', 'comfortable', 'warm', 'hot'].map(state => html`
                 <ha-selector
                   .hass=${this.hass}
@@ -158,12 +180,108 @@ export class RoomCardEditor extends LitElement {
               `)}
             </div>
           ` : ''}
+
+          <!-- Card Background Color -->
+          <ha-select
+            naturalMenuWidth
+            fixedMenuPosition
+            label="Card Background Color"
+            .value=${backgroundColorType}
+            @selected=${(e: any) => this._handleBackgroundColorTypeChange(e.target.value)}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="default">Default (Temperature-based)</ha-list-item>
+            <ha-list-item value="custom">Custom Color</ha-list-item>
+            <ha-list-item value="entity">Based on Entity</ha-list-item>
+          </ha-select>
+
+          ${backgroundColorType === 'custom' ? html`
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ color_rgb: {} }}
+              .value=${this._parseColorToRGB(this._config!.background_color as string)}
+              .label=${'Background Color'}
+              @value-changed=${(e: any) => {
+                const rgb = e.detail.value;
+                const hex = this._rgbToHex(rgb);
+                this._valueChanged({
+                  target: { configValue: 'background_color' },
+                  detail: { value: hex }
+                });
+              }}
+            ></ha-selector>
+          ` : ''}
+
+          ${backgroundColorType === 'entity' ? html`
+            <ha-entity-picker
+              .hass=${this.hass}
+              .value=${(this._config!.background_color as any)?.entity || ''}
+              .label=${'Background Color Entity'}
+              @value-changed=${(e: any) => {
+                this._updateConfig({ 
+                  background_color: { entity: e.detail.value }
+                });
+              }}
+            ></ha-entity-picker>
+          ` : ''}
+
+          <!-- Icon Circle Color -->
+          <ha-select
+            naturalMenuWidth
+            fixedMenuPosition
+            label="Icon Circle Background Color"
+            .value=${iconCircleColorType}
+            @selected=${(e: any) => this._handleIconCircleColorTypeChange(e.target.value)}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="default">Default</ha-list-item>
+            <ha-list-item value="custom">Custom Color</ha-list-item>
+            <ha-list-item value="entity">Based on Entity</ha-list-item>
+          </ha-select>
+
+          ${iconCircleColorType === 'custom' ? html`
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ color_rgb: {} }}
+              .value=${this._parseColorToRGB(this._config!.icon_circle_color as string)}
+              .label=${'Icon Circle Color'}
+              @value-changed=${(e: any) => {
+                const rgb = e.detail.value;
+                const hex = this._rgbToHex(rgb);
+                this._valueChanged({
+                  target: { configValue: 'icon_circle_color' },
+                  detail: { value: hex }
+                });
+              }}
+            ></ha-selector>
+          ` : ''}
+
+          ${iconCircleColorType === 'entity' ? html`
+            <ha-entity-picker
+              .hass=${this.hass}
+              .value=${(this._config!.icon_circle_color as any)?.entity || ''}
+              .label=${'Icon Circle Color Entity'}
+              @value-changed=${(e: any) => {
+                this._updateConfig({ 
+                  icon_circle_color: { entity: e.detail.value }
+                });
+              }}
+            ></ha-entity-picker>
+          ` : ''}
         </div>
       </ha-expansion-panel>
     `;
   }
 
   private _renderTemperatureSection(): TemplateResult {
+    const tempRanges = this._config!.temperature_ranges || {
+      cold: { min: -50, max: 45 },
+      cool: { min: 45, max: 65 },
+      comfortable: { min: 65, max: 78 },
+      warm: { min: 78, max: 85 },
+      hot: { min: 85, max: 150 }
+    };
+
     return html`
       <ha-expansion-panel
         .header=${'Temperature & Humidity'}
@@ -191,6 +309,16 @@ export class RoomCardEditor extends LitElement {
             .includeDeviceClasses=${['humidity']}
             allow-custom-entity
             label="Humidity Sensor"
+          ></ha-entity-picker>
+
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._config!.weather_entity || ''}
+            .configValue=${'weather_entity'}
+            @value-changed=${this._valueChanged}
+            .includeDomains=${['weather']}
+            allow-custom-entity
+            label="Weather Entity (Optional)"
           ></ha-entity-picker>
 
           <div class="switches">
@@ -224,24 +352,44 @@ export class RoomCardEditor extends LitElement {
             <ha-list-item value="F">Fahrenheit</ha-list-item>
           </ha-select>
 
-          <div class="state-colors">
-            <label>Background Colors by Temperature</label>
+          <div class="temperature-colors-section">
+            <label>Background Colors & Temperature Ranges</label>
             ${['cold', 'cool', 'comfortable', 'warm', 'hot'].map(state => html`
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${{ color_rgb: {} }}
-                .value=${this._parseColorToRGB(
-                  this._config!.background_colors?.[state] || this._getDefaultBackgroundColor(state)
-                )}
-                .label=${state.charAt(0).toUpperCase() + state.slice(1)}
-                @value-changed=${(e: any) => {
-                  const rgb = e.detail.value;
-                  const hex = this._rgbToHex(rgb);
-                  const backgroundColors = { ...this._config!.background_colors };
-                  backgroundColors[state] = hex;
-                  this._updateConfig({ background_colors: backgroundColors });
-                }}
-              ></ha-selector>
+              <div class="temp-range-item">
+                <div class="temp-range-header">
+                  <span>${state.charAt(0).toUpperCase() + state.slice(1)}</span>
+                </div>
+                <div class="temp-range-controls">
+                  <ha-selector
+                    .hass=${this.hass}
+                    .selector=${{ color_rgb: {} }}
+                    .value=${this._parseColorToRGB(
+                      this._config!.background_colors?.[state] || this._getDefaultBackgroundColor(state)
+                    )}
+                    @value-changed=${(e: any) => {
+                      const rgb = e.detail.value;
+                      const hex = this._rgbToHex(rgb);
+                      const backgroundColors = { ...this._config!.background_colors };
+                      backgroundColors[state] = hex;
+                      this._updateConfig({ background_colors: backgroundColors });
+                    }}
+                  ></ha-selector>
+                  <div class="temp-inputs">
+                    <ha-textfield
+                      label="Min °${this._config!.temperature_unit || 'F'}"
+                      type="number"
+                      .value=${tempRanges[state].min}
+                      @input=${(e: any) => this._updateTempRange(state, 'min', parseFloat(e.target.value))}
+                    ></ha-textfield>
+                    <ha-textfield
+                      label="Max °${this._config!.temperature_unit || 'F'}"
+                      type="number"
+                      .value=${tempRanges[state].max}
+                      @input=${(e: any) => this._updateTempRange(state, 'max', parseFloat(e.target.value))}
+                    ></ha-textfield>
+                  </div>
+                </div>
+              </div>
             `)}
           </div>
         </div>
@@ -276,11 +424,12 @@ export class RoomCardEditor extends LitElement {
   private _renderDevice(device: DeviceConfig, index: number): TemplateResult {
     const entityAttrs = device.entity ? this._getEntityAttributes(device.entity) : [];
     const isLightEntity = device.entity?.startsWith('light.');
+    const friendlyName = this._getFriendlyName(device.entity);
 
     return html`
       <ha-card outlined>
         <ha-expansion-panel
-          .header=${device.entity || 'New Device'}
+          .header=${friendlyName || 'New Device'}
           .secondary=${device.attribute || 'brightness'}
         >
           <div class="device-config">
@@ -289,46 +438,19 @@ export class RoomCardEditor extends LitElement {
               @click=${() => this._removeDevice(index)}
             ></ha-icon-button-arrow-prev>
 
-            <!-- Device Selector using proper HA selector for the device entity -->
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ device: { 
-                multiple: false,
-                entity: [
-                  { domain: 'light' },
-                  { domain: 'switch' },
-                  { domain: 'fan' },
-                  { domain: 'climate' },
-                  { domain: 'media_player' },
-                  { domain: 'cover' }
-                ]
-              }}}
-              .value=${this._getDeviceFromEntity(device.entity)}
-              .label=${'Device'}
-              @value-changed=${(e: any) => {
-                // Get first entity from the device
-                const deviceId = e.detail.value;
-                if (deviceId && this.hass) {
-                  const deviceEntities = Object.values(this.hass.entities)
-                    .filter((entity: any) => entity.device_id === deviceId);
-                  if (deviceEntities.length > 0) {
-                    this._handleDeviceChange({
-                      target: { configValue: 'entity' },
-                      detail: { value: deviceEntities[0].entity_id }
-                    }, index);
-                  }
-                }
-              }}
-            ></ha-selector>
-
-            <!-- Or use entity picker as fallback -->
+            <!-- Enhanced Entity Picker with all domains -->
             <ha-entity-picker
               .hass=${this.hass}
               .value=${device.entity || ''}
               .configValue=${'entity'}
               @value-changed=${(e: any) => this._handleDeviceChange(e, index)}
+              .includeDomains=${[
+                'light', 'switch', 'fan', 'media_player', 'climate', 
+                'cover', 'vacuum', 'sensor', 'camera', 'remote', 
+                'button', 'humidifier', 'valve', 'water_heater', 'group'
+              ]}
               allow-custom-entity
-              label="Entity (Alternative)"
+              label="Entity"
             ></ha-entity-picker>
 
             <ha-select
@@ -345,7 +467,6 @@ export class RoomCardEditor extends LitElement {
               `)}
             </ha-select>
 
-            <!-- Icon Selector using proper HA selector -->
             <ha-selector
               .hass=${this.hass}
               .selector=${{ icon: {} }}
@@ -363,7 +484,7 @@ export class RoomCardEditor extends LitElement {
               label="Color"
               .value=${device.color === 'light-color' ? 'light-color' : 'custom'}
               @selected=${(e: any) => {
-                const value = e.target.value === 'light-color' ? 'light-color' : '#FDD835';
+                const value = e.target.value === 'light-color' ? 'light-color' : device.color || '#FDD835';
                 this._handleDeviceChange({ 
                   target: { configValue: 'color' },
                   detail: { value }
@@ -378,7 +499,6 @@ export class RoomCardEditor extends LitElement {
             </ha-select>
 
             ${device.color !== 'light-color' ? html`
-              <!-- RGB Color Selector using proper HA selector -->
               <ha-selector
                 .hass=${this.hass}
                 .selector=${{ color_rgb: {} }}
@@ -431,49 +551,54 @@ export class RoomCardEditor extends LitElement {
 
     return html`
       <div class="modes-section">
-        <label>Modes</label>
-        <ha-icon-button
-          @click=${() => this._addMode(deviceIndex)}
-          .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
-        ></ha-icon-button>
+        <div class="modes-header">
+          <label>Modes</label>
+          <ha-icon-button
+            @click=${() => this._addMode(deviceIndex)}
+            .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
+          ></ha-icon-button>
+        </div>
         
         ${modes.map((mode, modeIndex) => html`
           <div class="mode-item">
-            <ha-textfield
-              label="Label"
-              .value=${mode.label}
-              @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
-            ></ha-textfield>
+            <div class="mode-row">
+              <ha-textfield
+                label="Label"
+                .value=${mode.label}
+                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
+              ></ha-textfield>
+              
+              <ha-textfield
+                label="Value"
+                type="number"
+                .value=${mode.value}
+                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'value', parseFloat(e.target.value))}
+              ></ha-textfield>
+              
+              <ha-textfield
+                label="Percentage"
+                type="number"
+                .value=${mode.percentage}
+                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'percentage', parseFloat(e.target.value))}
+                min="0"
+                max="100"
+              ></ha-textfield>
+              
+              <ha-icon-button
+                @click=${() => this._removeMode(deviceIndex, modeIndex)}
+                .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
+              ></ha-icon-button>
+            </div>
             
-            <ha-textfield
-              label="Value"
-              type="number"
-              .value=${mode.value}
-              @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'value', parseFloat(e.target.value))}
-            ></ha-textfield>
-            
-            <ha-textfield
-              label="Percentage"
-              type="number"
-              .value=${mode.percentage}
-              @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'percentage', parseFloat(e.target.value))}
-              min="0"
-              max="100"
-            ></ha-textfield>
-            
-            <!-- Icon Selector using proper HA selector -->
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ icon: {} }}
-              .value=${mode.icon}
-              .label=${'Mode Icon'}
-              @value-changed=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'icon', e.detail.value)}
-            ></ha-selector>
-            
-            <ha-icon-button
-              @click=${() => this._removeMode(deviceIndex, modeIndex)}
-              .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
-            ></ha-icon-button>
+            <div class="mode-icon-row">
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ icon: {} }}
+                .value=${mode.icon}
+                .label=${'Mode Icon'}
+                @value-changed=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'icon', e.detail.value)}
+              ></ha-selector>
+            </div>
           </div>
         `)}
       </div>
@@ -481,10 +606,48 @@ export class RoomCardEditor extends LitElement {
   }
 
   // Helper methods
+  private _getFriendlyName(entityId: string | undefined): string {
+    if (!entityId || !this.hass) return '';
+    const state = this.hass.states[entityId];
+    return state?.attributes?.friendly_name || entityId.split('.')[1].replace(/_/g, ' ');
+  }
+
+  private _updateTempRange(state: string, type: 'min' | 'max', value: number): void {
+    const ranges = { ...this._config!.temperature_ranges } || {};
+    if (!ranges[state]) {
+      ranges[state] = { min: 0, max: 100 };
+    }
+    ranges[state][type] = value;
+    this._updateConfig({ temperature_ranges: ranges });
+  }
+
+  private _handleBackgroundColorTypeChange(type: string): void {
+    let backgroundColor: any = undefined;
+    
+    if (type === 'custom') {
+      backgroundColor = '#FFFFFF';
+    } else if (type === 'entity') {
+      backgroundColor = { entity: '' };
+    }
+    
+    this._updateConfig({ background_color: backgroundColor });
+  }
+
+  private _handleIconCircleColorTypeChange(type: string): void {
+    let iconCircleColor: any = undefined;
+    
+    if (type === 'custom') {
+      iconCircleColor = '#333333';
+    } else if (type === 'entity') {
+      iconCircleColor = { entity: '' };
+    }
+    
+    this._updateConfig({ icon_circle_color: iconCircleColor });
+  }
+
   private _parseColorToRGB(color: string | undefined): number[] {
     if (!color) return [255, 255, 255];
     
-    // Handle hex color
     if (color.startsWith('#')) {
       const hex = color.replace('#', '');
       const r = parseInt(hex.substring(0, 2), 16);
@@ -493,7 +656,6 @@ export class RoomCardEditor extends LitElement {
       return [r, g, b];
     }
     
-    // Handle rgb() format
     const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
     if (match) {
       return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
@@ -507,13 +669,6 @@ export class RoomCardEditor extends LitElement {
       const hex = x.toString(16);
       return hex.length === 1 ? '0' + hex : hex;
     }).join('');
-  }
-
-  private _getDeviceFromEntity(entityId: string | undefined): string | undefined {
-    if (!entityId || !this.hass) return undefined;
-    
-    const entity = this.hass.entities[entityId];
-    return entity?.device_id;
   }
 
   private _getDefaultTemperatureColor(state: string): string {
@@ -595,17 +750,43 @@ export class RoomCardEditor extends LitElement {
     const configValue = target.configValue;
     const value = target.checked !== undefined ? target.checked : ev.detail?.value ?? target.value;
     
-    devices[index] = { ...devices[index], [configValue]: value };
+    // If entity changed, auto-detect defaults
+    if (configValue === 'entity' && value) {
+      const domain = value.split('.')[0];
+      const defaults = this.deviceDefaults[domain];
+      if (defaults && !devices[index].icon) {
+        devices[index] = { 
+          ...devices[index], 
+          entity: value,
+          icon: defaults.icon,
+          color: defaults.color,
+          attribute: defaults.attribute
+        };
+      } else {
+        devices[index] = { ...devices[index], [configValue]: value };
+      }
+    } else {
+      devices[index] = { ...devices[index], [configValue]: value };
+    }
+    
     this._updateConfig({ devices });
   }
 
   private _addDevice(): void {
     const devices = [...(this._config!.devices || [])];
+    const nextIndex = devices.length;
+    
+    // Cycle through different default types
+    const deviceTypes = Object.keys(this.deviceDefaults);
+    const typeIndex = nextIndex % deviceTypes.length;
+    const deviceType = deviceTypes[typeIndex];
+    const defaults = this.deviceDefaults[deviceType];
+    
     devices.push({
       entity: '',
-      attribute: 'brightness',
-      icon: 'mdi:lightbulb',
-      color: '#FDD835',
+      attribute: defaults.attribute,
+      icon: defaults.icon,
+      color: defaults.color,
       scale: 1,
       type: 'continuous'
     });
@@ -647,35 +828,38 @@ export class RoomCardEditor extends LitElement {
     this._updateConfig({ devices });
   }
 
-  private _getAreas(): string[] {
-    if (!this.hass) return [];
-    return Object.values(this.hass.areas || {}).map((area: any) => area.name).sort();
-  }
-
   private _getEntityAttributes(entity: string): string[] {
-    if (!this.hass || !entity) return ['brightness', 'volume_level', 'percentage'];
+    if (!this.hass || !entity) return ['brightness', 'volume_level', 'percentage', 'state'];
     
     const domain = entity.split('.')[0];
     const domainAttributes: Record<string, string[]> = {
-      light: ['brightness', 'rgb_color', 'color_temp', 'effect'],
-      media_player: ['volume_level', 'media_position', 'media_duration'],
-      fan: ['percentage', 'preset_mode', 'speed'],
-      climate: ['temperature', 'target_temp_high', 'target_temp_low', 'humidity'],
-      cover: ['position', 'tilt_position'],
-      vacuum: ['battery_level', 'fan_speed']
+      light: ['brightness', 'rgb_color', 'color_temp', 'effect', 'white_value', 'brightness_pct'],
+      media_player: ['volume_level', 'media_position', 'media_duration', 'source', 'sound_mode'],
+      fan: ['percentage', 'preset_mode', 'speed', 'oscillating', 'direction'],
+      climate: ['temperature', 'target_temp_high', 'target_temp_low', 'humidity', 'fan_mode', 'swing_mode'],
+      cover: ['position', 'tilt_position', 'current_position'],
+      vacuum: ['battery_level', 'fan_speed', 'status'],
+      humidifier: ['humidity', 'mode', 'target_humidity'],
+      water_heater: ['temperature', 'target_temp_high', 'target_temp_low', 'operation_mode'],
+      sensor: ['state'],
+      switch: ['state'],
+      camera: ['state'],
+      remote: ['state'],
+      button: ['state'],
+      valve: ['state', 'current_position']
     };
     
-    const defaultAttrs = domainAttributes[domain] || [];
+    const defaultAttrs = domainAttributes[domain] || ['state'];
     const stateObj = this.hass.states[entity];
     
     if (stateObj?.attributes) {
       const customAttrs = Object.keys(stateObj.attributes).filter(
-        attr => !['friendly_name', 'icon', 'entity_id'].includes(attr)
+        attr => !['friendly_name', 'icon', 'entity_id', 'supported_features', 'device_class'].includes(attr)
       );
       return [...new Set([...defaultAttrs, ...customAttrs])];
     }
     
-    return defaultAttrs.length > 0 ? defaultAttrs : ['brightness', 'volume_level', 'percentage'];
+    return defaultAttrs;
   }
 
   static get styles(): CSSResult {
@@ -707,7 +891,8 @@ export class RoomCardEditor extends LitElement {
         gap: 8px;
       }
 
-      .devices-header {
+      .devices-header,
+      .modes-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -724,15 +909,15 @@ export class RoomCardEditor extends LitElement {
         padding: 16px;
       }
 
-      .modes-section,
-      .state-colors {
+      .modes-section {
         display: flex;
         flex-direction: column;
         gap: 8px;
       }
 
       .modes-section label,
-      .state-colors label {
+      .state-colors label,
+      .temperature-colors-section label {
         font-size: 0.9em;
         font-weight: 500;
         color: var(--secondary-text-color);
@@ -740,11 +925,63 @@ export class RoomCardEditor extends LitElement {
 
       .mode-item {
         display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+      }
+
+      .mode-row {
+        display: flex;
         gap: 8px;
         align-items: center;
       }
 
-      .mode-item ha-textfield {
+      .mode-row ha-textfield {
+        flex: 1;
+      }
+
+      .mode-icon-row {
+        display: flex;
+        width: 100%;
+      }
+
+      .mode-icon-row ha-selector {
+        flex: 1;
+      }
+
+      .temperature-colors-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .temp-range-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+      }
+
+      .temp-range-header {
+        font-weight: 500;
+      }
+
+      .temp-range-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .temp-inputs {
+        display: flex;
+        gap: 8px;
+      }
+
+      .temp-inputs ha-textfield {
         flex: 1;
       }
 
@@ -757,7 +994,6 @@ export class RoomCardEditor extends LitElement {
         --expansion-panel-content-padding: 0;
       }
 
-      /* Ensure selectors display correctly */
       ha-selector {
         display: block;
       }
