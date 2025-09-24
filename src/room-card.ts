@@ -692,58 +692,60 @@ export class RoomCard extends LitElement implements LovelaceCard {
 
     return html`
       <div class="card-container" style="background-color: ${backgroundColor}">
-        <div class="title-section">
-          <div class="room-name">${roomName}</div>
-          ${tempHumidity ? html`<div class="temp-humidity">${tempHumidity}</div>` : ''}
-        </div>
+        <div class="main-content">
+          <div class="title-section">
+            <div class="room-name">${roomName}</div>
+            ${tempHumidity ? html`<div class="temp-humidity">${tempHumidity}</div>` : ''}
+          </div>
 
-        <div class="icon-section">
-          <div class="icon-container">
-            <div class="icon-background" 
-                style="background-color: ${iconBackgroundColor}"
-                @click=${this.handleIconClick}>
-              <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
+          <div class="icon-section">
+            <div class="icon-container">
+              <div class="icon-background" 
+                  style="background-color: ${iconBackgroundColor}"
+                  @click=${this.handleIconClick}>
+                <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
+              </div>
+              
+              ${isDeviceOn && hasActiveDevice && currentDevice && showSlider ? html`
+              <div class="slider-container">
+                <svg class="slider-svg" width="150" height="150" viewBox="0 0 150 150"
+                  @pointerdown=${this.handlePointerDown}
+                  @pointermove=${this.handlePointerMove}
+                  @pointerup=${this.handlePointerUp}
+                  @pointercancel=${this.handlePointerUp}>
+                  <!-- Track arc -->
+                  <path
+                    class="slider-track"
+                    d="M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}"
+                  />
+                  <!-- Progress arc -->
+                  <path
+                    class="slider-progress"
+                    style="stroke: ${sliderColor}"
+                    d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
+                  />
+                  <!-- Thumb -->
+                  <circle
+                    class="slider-thumb ${this.isDragging ? 'dragging' : ''}"
+                    style="fill: ${sliderColor}"
+                    cx="${thumbX}"
+                    cy="${thumbY}"
+                    r="16"
+                  />
+                  <!-- Icon on thumb -->
+                  <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
+                      <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_color || 'white'};"></ha-icon>
+                    </div>
+                  </foreignObject>
+                </svg>
+              </div>
+              ` : ''}
             </div>
-            
-            ${isDeviceOn && hasActiveDevice && currentDevice && showSlider ? html`
-            <div class="slider-container">
-              <svg class="slider-svg" width="150" height="150" viewBox="0 0 150 150"
-                @pointerdown=${this.handlePointerDown}
-                @pointermove=${this.handlePointerMove}
-                @pointerup=${this.handlePointerUp}
-                @pointercancel=${this.handlePointerUp}>
-                <!-- Track arc -->
-                <path
-                  class="slider-track"
-                  d="M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}"
-                />
-                <!-- Progress arc -->
-                <path
-                  class="slider-progress"
-                  style="stroke: ${sliderColor}"
-                  d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
-                />
-                <!-- Thumb -->
-                <circle
-                  class="slider-thumb ${this.isDragging ? 'dragging' : ''}"
-                  style="fill: ${sliderColor}"
-                  cx="${thumbX}"
-                  cy="${thumbY}"
-                  r="16"
-                />
-                <!-- Icon on thumb -->
-                <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
-                  <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
-                    <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_color || 'white'};"></ha-icon>
-                  </div>
-                </foreignObject>
-              </svg>
-            </div>
-            ` : ''}
           </div>
         </div>
 
-        <div class="chips-container">
+        <div class="chips-section">
           ${deviceColumns.map((column, colIndex) => html`
             <div class="chips-column">
               ${column.map((device) => {
