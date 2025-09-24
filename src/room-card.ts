@@ -922,9 +922,15 @@ export class RoomCard extends LitElement implements LovelaceCard {
         grid-area: chips;
         display: flex;
         flex-direction: column;
-        gap: 10px;
         margin-right: 8px;
         margin-top: 8px;
+        margin-bottom: 8px;
+      }
+        
+      .chips-column {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
       }
 
       .chip {
