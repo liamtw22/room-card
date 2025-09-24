@@ -793,7 +793,6 @@ export class RoomCard extends LitElement implements LovelaceCard {
     return css`
       :host {
         display: block;
-        height: 182px;
       }
 
       .card-container {
@@ -810,6 +809,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
         cursor: pointer;
         user-select: none;
         -webkit-user-select: none;
+        overflow: hidden;
       }
 
       .title-section {
@@ -840,9 +840,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
         align-items: center;
         justify-content: flex-start;
         position: relative;
-        padding-top: 20px;  /* Reduced from 37px to move up */
-        padding-left: 12px; /* Added left padding */
-        overflow: hidden;
+        padding-top: 15px;
       }
 
       .icon-container {
@@ -850,6 +848,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
         width: 110px;
         height: 110px;
         margin-left: -10px;
+        margin-bottom: -10px;
         cursor: pointer;
       }
 
@@ -923,7 +922,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
         grid-area: chips;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 10px;
         margin-right: 8px;
         margin-top: 8px;
       }
@@ -932,8 +931,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 40px;
-        width: 40px;
+        height: 38px;
+        width: 38px;
         border-radius: 50%;
         cursor: pointer;
         transition: all 0.3s ease;
