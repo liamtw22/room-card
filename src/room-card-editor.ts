@@ -707,9 +707,19 @@ export class RoomCardEditor extends LitElement {
 
   private _handleBackgroundTypeChange(type: string): void {
     if (type === 'static') {
-      this._updateConfig({ background: 'var(--primary-background-color)' });
-    } else {
-      this._updateConfig({ background: { entity: '', ranges: [] } });
+      // Switch to static color - empty string means no background
+      this._updateConfig({ 
+        background: '' 
+      });
+    } else if (type === 'entity') {
+      // Switch to entity-based color configuration
+      // Provide empty entity and empty ranges array for user to configure
+      this._updateConfig({ 
+        background: { 
+          entity: '',
+          ranges: []
+        }
+      });
     }
   }
 

@@ -216,31 +216,53 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private getBackgroundColor(): string {
-    if (!this.hass || !this._config) return "var(--primary-background-color)";
+      if (!this.hass || !this._config) return "";
 
-    const background = this._config.background;
-    
-    if (!background) return "var(--primary-background-color)"; // Default to theme background
-    
-    if (typeof background === 'string') {
-      return background; // Static color
-    } else if (background.entity) {
-      const entity = this.hass.states[background.entity];
-      if (entity && background.ranges) {
-        const value = parseFloat(entity.state);
-        if (!isNaN(value)) {
-          // Find matching range
-          for (const range of background.ranges) {
-            if (value >= range.min && value <= range.max) {
-              return range.color;
+      const background = this._config.background;
+      
+      // No background configured - return empty string (no default)
+      if (!background) return "";
+      
+      // Static color configuration
+      if (typeof background === 'string') {
+        return background;
+      } 
+      
+      // Entity-based color configuration
+      else if (background.entity) {
+        const entity = this.hass.states[background.entity];
+        
+        // Entity doesn't exist
+        if (!entity) {
+          return "";
+        }
+        
+        // Check if ranges are defined
+        if (background.ranges) {
+          const value = parseFloat(entity.state);
+          
+          // For numeric states, check ranges
+          if (!isNaN(value)) {
+            for (const range of background.ranges) {
+              if (value >= range.min && value <= range.max) {
+                return range.color;
+              }
             }
           }
+          
+          // For non-numeric states, could also check exact state matches
+          // You could extend this to support state-based colors like:
+          // { state: "on", color: "#4CAF50" }
+          // { state: "off", color: "#757575" }
         }
+        
+        // No matching range found
+        return "";
       }
+      
+      // No valid configuration found
+      return "";
     }
-    
-    return "var(--primary-background-color)";
-  }
 
   private getIconColor(): string {
     if (!this.hass || !this._config) return "#FFFFFF";
@@ -930,15 +952,15 @@ export class RoomCard extends LitElement implements LovelaceCard {
       .chips-column {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 5px;
       }
 
       .chip {
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 38px;
-        width: 38px;
+        height: 40px;
+        width: 40px;
         border-radius: 50%;
         cursor: pointer;
         transition: all 0.3s ease;
