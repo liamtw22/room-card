@@ -1,1100 +1,1017 @@
-import { LitElement, html, css, TemplateResult, CSSResult } from 'lit';
+import {
+  LitElement,
+  html,
+  css,
+  TemplateResult,
+  PropertyValues,
+  CSSResult
+} from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant } from 'custom-card-helpers';
-import { RoomCardConfig, DeviceConfig, DeviceMode } from './room-card';
+import {
+  HomeAssistant,
+  LovelaceCard,
+  LovelaceCardConfig
+} from 'custom-card-helpers';
 
-@customElement('room-card-editor')
-export class RoomCardEditor extends LitElement {
-  @property({ attribute: false }) public hass?: HomeAssistant;
+// Import version from package.json
+import { version } from '../package.json';
+
+// Import editor
+import './room-card-editor';
+
+// Types
+export interface RoomCardConfig extends LovelaceCardConfig {
+  type: 'custom:room-card';
+  area: string; // Required area ID
+  name?: string; // Optional display name
+  icon?: string;
+  
+  // Color configurations - can be static or entity-based
+  background?: string | EntityColorConfig; // Card background
+  icon_color?: string | EntityColorConfig; // Icon color
+  icon_background?: string | EntityColorConfig; // Icon background circle color
+  
+  // Temperature and humidity sensors
+  temperature_sensor?: string;
+  humidity_sensor?: string;
+  
+  // Display options
+  haptic_feedback?: boolean;
+  show_temperature?: boolean;
+  show_humidity?: boolean;
+  temperature_unit?: 'C' | 'F';
+  chip_columns?: number; // Number of chip columns (1-4)
+  
+  // Devices
+  devices?: DeviceConfig[];
+}
+
+export interface EntityColorConfig {
+  entity: string;
+  ranges?: ColorRange[]; // Array of value ranges with colors
+}
+
+export interface ColorRange {
+  min: number;
+  max: number;
+  color: string;
+}
+
+export interface DeviceConfig {
+  entity: string;
+  control_entity?: string; // Optional separate entity for control
+  attribute?: string;
+  icon?: string;
+  icon_color?: string; // Icon color on chip/slider
+  color_on?: string | 'light-color'; // Color when on
+  color_off?: string; // Color when off
+  color_unavailable?: string; // Color when unavailable
+  scale?: number;
+  type?: 'continuous' | 'discrete';
+  modes?: DeviceMode[];
+  show_slider?: boolean;
+  show_chip?: boolean;
+}
+
+export interface DeviceMode {
+  value: number;
+  label: string;
+  percentage: number;
+  icon?: string;
+}
+
+export interface TemperatureColors {
+  cold: string;
+  cool: string;
+  comfortable: string;
+  warm: string;
+  hot: string;
+}
+
+// Register the card
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: 'room-card',
+  name: 'Room Card',
+  preview: true,
+  description: 'A custom room card with circular slider control'
+});
+
+console.info(
+  `%c  ROOM-CARD  %c  Version ${version}  `,
+  'color: white; font-weight: bold; background: #0288d1',
+  'color: #0288d1; font-weight: bold; background: #e1f5fe'
+);
+
+@customElement('room-card')
+export class RoomCard extends LitElement implements LovelaceCard {
+  @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config?: RoomCardConfig;
-  @state() private _helpers?: any;
-  @state() private _expandedSections = {
-    basic: true,
-    appearance: false,
-    temperature: false,
-    devices: false
-  };
+  @state() private currentDeviceIndex = -1;
+  @state() private isDragging = false;
+  @state() private sliderValue = 0;
+  @state() private devices: DeviceConfig[] = [];
 
-  // Default icons and colors for different device types
-  private deviceDefaults: Record<string, { icon: string; color: string; attribute: string }> = {
-    light: { icon: 'mdi:lightbulb', color: '#FDD835', attribute: 'brightness' },
-    switch: { icon: 'mdi:toggle-switch', color: '#4CAF50', attribute: 'state' },
-    fan: { icon: 'mdi:fan', color: '#03A9F4', attribute: 'percentage' },
-    media_player: { icon: 'mdi:speaker', color: '#9C27B0', attribute: 'volume_level' },
-    climate: { icon: 'mdi:thermostat', color: '#FF9800', attribute: 'temperature' },
-    cover: { icon: 'mdi:window-shutter', color: '#795548', attribute: 'position' },
-    vacuum: { icon: 'mdi:robot-vacuum', color: '#607D8B', attribute: 'battery_level' },
-    sensor: { icon: 'mdi:gauge', color: '#00BCD4', attribute: 'state' },
-    camera: { icon: 'mdi:camera', color: '#FF5722', attribute: 'state' },
-    remote: { icon: 'mdi:remote', color: '#3F51B5', attribute: 'state' },
-    button: { icon: 'mdi:button-cursor', color: '#673AB7', attribute: 'state' },
-    humidifier: { icon: 'mdi:air-humidifier', color: '#00ACC1', attribute: 'humidity' },
-    valve: { icon: 'mdi:valve', color: '#8BC34A', attribute: 'state' },
-    water_heater: { icon: 'mdi:water-boiler', color: '#F44336', attribute: 'temperature' }
-  };
+  // Slider configuration
+  private startAngle = -110;
+  private endAngle = 30;
+  private totalAngle = 140;
+  private actionTaken = false;
+  private thumbTapped = false;
+  private _handleMove?: (e: PointerEvent) => void;
+  private _handleUp?: (e: PointerEvent) => void;
 
   public setConfig(config: RoomCardConfig): void {
-    // Don't modify the config if it already has a background set
-    // Only apply default for truly new cards (no background property at all)
-    this._config = {
-      ...config
-    };
-    
-    // Only set default if background is undefined (not if it's an empty string or other value)
-    if (this._config.background === undefined) {
-      this._config = {
-        ...this._config,
-        background: 'var(--card-background-color)'
-      };
+    if (!config.area) {
+      throw new Error("You need to define an area");
     }
     
-    this._loadHelpers();
+    this._config = config;
+    this._initializeDevices();
   }
 
-  private async _loadHelpers(): Promise<void> {
-    this._helpers = await (window as any).loadCardHelpers();
-  }
-
-  protected render(): TemplateResult | void {
-    if (!this.hass || !this._config) {
-      return html``;
-    }
-
-    return html`
-      <div class="card-config">
-        ${this._renderBasicSection()}
-        ${this._renderAppearanceSection()}
-        ${this._renderTemperatureSection()}
-        ${this._renderDevicesSection()}
-      </div>
-    `;
-  }
-
-  private _getAreaName(areaId: string): string {
-    if (!this.hass || !areaId) return areaId;
-    const area = this.hass.areas[areaId];
-    return area?.name || areaId;
-  }
-
-  private _renderBasicSection(): TemplateResult {
-    const areaName = this._getAreaName(this._config!.area);
-    
-    return html`
-      <ha-expansion-panel
-        .header=${'Basic Configuration'}
-        .expanded=${this._expandedSections.basic}
-        @expanded-changed=${(e: any) => this._expandedSections.basic = e.detail.expanded}
-      >
-        <div class="section-content">
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ area: {} }}
-            .value=${this._config!.area}
-            .label=${'Area'}
-            .required=${true}
-            @value-changed=${(e: any) => this._valueChanged({
-              target: { configValue: 'area' },
-              detail: { value: e.detail.value }
-            })}
-          ></ha-selector>
-          
-          <div class="info-row">
-            <span class="info-label">Selected Area:</span>
-            <span class="info-value">${areaName}</span>
-          </div>
-
-          <ha-textfield
-            label="Display Name (Optional)"
-            .value=${this._config!.name || ''}
-            .configValue=${'name'}
-            @input=${this._valueChanged}
-            helper="Leave empty to use the area name: ${areaName}"
-          ></ha-textfield>
-
-          <ha-formfield label="Haptic Feedback">
-            <ha-switch
-              .checked=${this._config!.haptic_feedback !== false}
-              .configValue=${'haptic_feedback'}
-              @change=${this._valueChanged}
-            ></ha-switch>
-          </ha-formfield>
-        </div>
-      </ha-expansion-panel>
-    `;
-  }
-
-  private _renderAppearanceSection(): TemplateResult {
-    // Properly detect background type
-    let backgroundType = 'static';
-    if (this._config!.background && typeof this._config!.background === 'object' && 'entity' in this._config!.background) {
-      backgroundType = 'entity';
-    }
-    
-    // Same for icon colors
-    const iconColorType = typeof this._config!.icon_color === 'object' && this._config!.icon_color?.entity ? 
-      'entity' : 'static';
-    const iconBgColorType = typeof this._config!.icon_background === 'object' && this._config!.icon_background?.entity ? 
-      'entity' : 'static';
-
-    return html`
-      <ha-expansion-panel
-        .header=${'Appearance'}
-        .expanded=${this._expandedSections.appearance}
-        @expanded-changed=${(e: any) => this._expandedSections.appearance = e.detail.expanded}
-      >
-        <div class="section-content">
-          <!-- Icon Selector -->
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ icon: {} }}
-            .value=${this._config!.icon || 'mdi:home'}
-            .label=${'Icon'}
-            @value-changed=${(e: any) => this._valueChanged({
-              target: { configValue: 'icon' },
-              detail: { value: e.detail.value }
-            })}
-          ></ha-selector>
-
-          <!-- Card Background Configuration -->
-          <div class="color-config-section">
-            <label>Card Background</label>
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Background Type"
-              .value=${backgroundType}
-              @selected=${(e: any) => this._handleBackgroundTypeChange(e.target.value)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              <ha-list-item value="static">Static Color</ha-list-item>
-              <ha-list-item value="entity">Entity Based</ha-list-item>
-            </ha-select>
-
-            ${backgroundType === 'static' ? html`
-              <ha-textfield
-                label="Background Color"
-                .value=${typeof this._config!.background === 'string' ? this._config!.background : 'var(--card-background-color)'}
-                @input=${(e: any) => {
-                  this._updateConfig({ background: e.target.value });
-                }}
-                helper="Theme variables: var(--card-background-color), var(--primary-background-color) | Colors: #FFFFFF, rgb(), rgba() | Empty for transparent"
-                placeholder="var(--card-background-color)"
-              ></ha-textfield>
-            ` : html`
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${{ entity: {} }}
-                .value=${(this._config!.background as any)?.entity || ''}
-                .label=${'Entity'}
-                @value-changed=${(e: any) => {
-                  const background = this._config!.background as any || {};
-                  this._updateConfig({ 
-                    background: { 
-                      ...background,
-                      entity: e.detail.value 
-                    }
-                  });
-                }}
-              ></ha-selector>
-              ${(this._config!.background as any)?.entity ? 
-                this._renderColorRanges('background', (this._config!.background as any)?.ranges || []) : ''}
-            `}
-          </div>
-
-          <!-- Icon Color Configuration -->
-          <div class="color-config-section">
-            <label>Icon Color</label>
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Icon Color Type"
-              .value=${iconColorType}
-              @selected=${(e: any) => this._handleIconColorTypeChange(e.target.value)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              <ha-list-item value="static">Static Color</ha-list-item>
-              <ha-list-item value="entity">Entity Based</ha-list-item>
-            </ha-select>
-
-            ${iconColorType === 'static' ? html`
-              <ha-textfield
-                label="Icon Color (hex, rgb, rgba)"
-                .value=${this._config!.icon_color || '#FFFFFF'}
-                @input=${(e: any) => {
-                  this._updateConfig({ icon_color: e.target.value });
-                }}
-                helper="Use CSS values like #FFFFFF, rgb(255,255,255), rgba(255,255,255,0.8)"
-              ></ha-textfield>
-            ` : html`
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${{ entity: {} }}
-                .value=${(this._config!.icon_color as any)?.entity || ''}
-                .label=${'Entity'}
-                @value-changed=${(e: any) => {
-                  const iconColor = this._config!.icon_color as any || {};
-                  this._updateConfig({ 
-                    icon_color: { 
-                      ...iconColor,
-                      entity: e.detail.value 
-                    }
-                  });
-                }}
-              ></ha-selector>
-              ${(this._config!.icon_color as any)?.entity ? 
-                this._renderColorRanges('icon_color', (this._config!.icon_color as any)?.ranges || []) : ''}
-            `}
-          </div>
-
-          <!-- Icon Background Configuration -->
-          <div class="color-config-section">
-            <label>Icon Background</label>
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Icon Background Type"
-              .value=${iconBgColorType}
-              @selected=${(e: any) => this._handleIconBgTypeChange(e.target.value)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              <ha-list-item value="static">Static Color</ha-list-item>
-              <ha-list-item value="entity">Entity Based</ha-list-item>
-            </ha-select>
-
-            ${iconBgColorType === 'static' ? html`
-              <ha-textfield
-                label="Icon Background Color (hex, rgb, rgba)"
-                .value=${this._config!.icon_background || 'rgba(255, 255, 255, 0.2)'}
-                @input=${(e: any) => {
-                  this._updateConfig({ icon_background: e.target.value });
-                }}
-                helper="Use CSS values like #333333, rgb(51,51,51), rgba(255,255,255,0.2)"
-              ></ha-textfield>
-            ` : html`
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${{ entity: {} }}
-                .value=${(this._config!.icon_background as any)?.entity || ''}
-                .label=${'Entity'}
-                @value-changed=${(e: any) => {
-                  const iconBg = this._config!.icon_background as any || {};
-                  this._updateConfig({ 
-                    icon_background: { 
-                      ...iconBg,
-                      entity: e.detail.value 
-                    }
-                  });
-                }}
-              ></ha-selector>
-              ${(this._config!.icon_background as any)?.entity ? 
-                this._renderColorRanges('icon_background', (this._config!.icon_background as any)?.ranges || []) : ''}
-            `}
-          </div>
-        </div>
-      </ha-expansion-panel>
-    `;
-  }
-
-  private _renderColorRanges(configKey: string, ranges: any[]): TemplateResult {
-    return html`
-      <div class="color-ranges">
-        <div class="ranges-header">
-          <label>Color Ranges</label>
-          <ha-icon-button
-            @click=${() => this._addColorRange(configKey)}
-            .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
-          ></ha-icon-button>
-        </div>
-        <div class="ranges-list">
-          ${ranges.map((range, index) => html`
-            <div class="range-item">
-              <div class="range-inputs">
-                ${range.state !== undefined ? html`
-                  <ha-textfield
-                    label="State"
-                    .value=${range.state || ''}
-                    @input=${(e: any) => this._updateColorRange(configKey, index, 'state', e.target.value)}
-                  ></ha-textfield>
-                ` : html`
-                  <ha-textfield
-                    label="Min"
-                    type="number"
-                    .value=${range.min !== undefined ? range.min : ''}
-                    @input=${(e: any) => this._updateColorRange(configKey, index, 'min', parseFloat(e.target.value))}
-                  ></ha-textfield>
-                  <ha-textfield
-                    label="Max"
-                    type="number"
-                    .value=${range.max !== undefined ? range.max : ''}
-                    @input=${(e: any) => this._updateColorRange(configKey, index, 'max', parseFloat(e.target.value))}
-                  ></ha-textfield>
-                `}
-                <ha-textfield
-                  label="Color"
-                  .value=${range.color || ''}
-                  @input=${(e: any) => this._updateColorRange(configKey, index, 'color', e.target.value)}
-                ></ha-textfield>
-                <ha-icon-button
-                  @click=${() => this._removeColorRange(configKey, index)}
-                  .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
-                ></ha-icon-button>
-              </div>
-              <ha-button-menu>
-                <ha-icon-button
-                  slot="trigger"
-                  .path=${'M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z'}
-                ></ha-icon-button>
-                <ha-list-item @click=${() => this._toggleRangeType(configKey, index)}>
-                  ${range.state !== undefined ? 'Switch to Numeric Range' : 'Switch to State Match'}
-                </ha-list-item>
-              </ha-button-menu>
-            </div>
-          `)}
-        </div>
-      </div>
-    `;
-  }
-
-  private _renderTemperatureSection(): TemplateResult {
-    return html`
-      <ha-expansion-panel
-        .header=${'Temperature & Humidity'}
-        .expanded=${this._expandedSections.temperature}
-        @expanded-changed=${(e: any) => this._expandedSections.temperature = e.detail.expanded}
-      >
-        <div class="section-content">
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ entity: { domain: 'sensor', device_class: 'temperature' } }}
-            .value=${this._config!.temperature_sensor}
-            .label=${'Temperature Sensor'}
-            @value-changed=${(e: any) => this._valueChanged({
-              target: { configValue: 'temperature_sensor' },
-              detail: { value: e.detail.value }
-            })}
-          ></ha-selector>
-
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ entity: { domain: 'sensor', device_class: 'humidity' } }}
-            .value=${this._config!.humidity_sensor}
-            .label=${'Humidity Sensor'}
-            @value-changed=${(e: any) => this._valueChanged({
-              target: { configValue: 'humidity_sensor' },
-              detail: { value: e.detail.value }
-            })}
-          ></ha-selector>
-
-          <div class="switches">
-            <ha-formfield label="Show Temperature">
-              <ha-switch
-                .checked=${this._config!.show_temperature !== false}
-                .configValue=${'show_temperature'}
-                @change=${this._valueChanged}
-              ></ha-switch>
-            </ha-formfield>
-
-            <ha-formfield label="Show Humidity">
-              <ha-switch
-                .checked=${this._config!.show_humidity !== false}
-                .configValue=${'show_humidity'}
-                @change=${this._valueChanged}
-              ></ha-switch>
-            </ha-formfield>
-          </div>
-
-          <ha-select
-            naturalMenuWidth
-            fixedMenuPosition
-            label="Temperature Unit"
-            .value=${this._config!.temperature_unit || 'F'}
-            .configValue=${'temperature_unit'}
-            @selected=${this._valueChanged}
-            @closed=${(e: Event) => e.stopPropagation()}
-          >
-            <ha-list-item value="F">Fahrenheit</ha-list-item>
-            <ha-list-item value="C">Celsius</ha-list-item>
-          </ha-select>
-        </div>
-      </ha-expansion-panel>
-    `;
-  }
-
-  private _renderDevicesSection(): TemplateResult {
-    const devices = this._config!.devices || [];
-
-    return html`
-      <ha-expansion-panel
-        .header=${'Devices'}
-        .expanded=${this._expandedSections.devices}
-        @expanded-changed=${(e: any) => this._expandedSections.devices = e.detail.expanded}
-      >
-        <div class="section-content">
-          <div class="devices-header">
-            <label>Device Controls</label>
-            <ha-icon-button
-              @click=${this._addDevice}
-              .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
-            ></ha-icon-button>
-          </div>
-
-          <ha-textfield
-            label="Chip Columns"
-            type="number"
-            min="1"
-            max="4"
-            .value=${this._config!.chip_columns || 1}
-            @input=${(e: any) => {
-              const value = parseInt(e.target.value);
-              if (value >= 1 && value <= 4) {
-                this._updateConfig({ chip_columns: value });
-              }
-            }}
-            helper="Number of columns for device chips (1-4)"
-          ></ha-textfield>
-
-          ${devices.map((device, index) => this._renderDeviceConfig(device, index))}
-        </div>
-      </ha-expansion-panel>
-    `;
-  }
-
-  private _renderDeviceConfig(device: DeviceConfig, index: number): TemplateResult {
-    const entity = device.entity ? this.hass!.states[device.entity] : null;
-    const domain = device.entity ? device.entity.split('.')[0] : '';
-    const isLightEntity = domain === 'light';
-    const attributes = this._getEntityAttributes(device.entity);
-
-    return html`
-      <div class="device-config">
-        <div class="device-header">
-          <span>Device ${index + 1}</span>
-          <ha-icon-button
-            @click=${() => this._removeDevice(index)}
-            .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
-          ></ha-icon-button>
-        </div>
-
-        <ha-selector
-          .hass=${this.hass}
-          .selector=${{ entity: {} }}
-          .value=${device.entity}
-          .label=${'Entity'}
-          @value-changed=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'entity' },
-            detail: { value: e.detail.value }
-          }, index)}
-        ></ha-selector>
-
-        <ha-textfield
-          label="Control Entity (Optional)"
-          .value=${device.control_entity || ''}
-          @input=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'control_entity' },
-            detail: { value: e.target.value }
-          }, index)}
-          helper="Leave empty to use the same entity for control"
-        ></ha-textfield>
-
-        <ha-selector
-          .hass=${this.hass}
-          .selector=${{ icon: {} }}
-          .value=${device.icon || ''}
-          .label=${'Icon'}
-          @value-changed=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'icon' },
-            detail: { value: e.detail.value }
-          }, index)}
-        ></ha-selector>
-
-        <ha-select
-          naturalMenuWidth
-          fixedMenuPosition
-          label="Attribute"
-          .value=${device.attribute || (this.deviceDefaults[domain]?.attribute || 'brightness')}
-          @selected=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'attribute' },
-            detail: { value: e.target.value }
-          }, index)}
-          @closed=${(e: Event) => e.stopPropagation()}
-        >
-          ${attributes.map(attr => html`
-            <ha-list-item value="${attr}">${this._formatAttributeName(attr)}</ha-list-item>
-          `)}
-        </ha-select>
-
-        <ha-textfield
-          label="Scale Factor"
-          type="number"
-          .value=${device.scale || (domain === 'light' ? 2.55 : 1)}
-          @input=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'scale' },
-            detail: { value: parseFloat(e.target.value) }
-          }, index)}
-          helper="Multiplier for slider values (e.g., 2.55 for brightness 0-255)"
-        ></ha-textfield>
-
-        <ha-select
-          naturalMenuWidth
-          fixedMenuPosition
-          label="Control Type"
-          .value=${device.type || 'continuous'}
-          @selected=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'type' },
-            detail: { value: e.target.value }
-          }, index)}
-          @closed=${(e: Event) => e.stopPropagation()}
-        >
-          <ha-list-item value="continuous">Continuous Slider</ha-list-item>
-          <ha-list-item value="discrete">Discrete Modes</ha-list-item>
-        </ha-select>
-
-        ${device.type === 'discrete' ? this._renderDeviceModes(device, index) : ''}
-
-        <div class="device-toggles">
-          <ha-formfield label="Show Chip">
-            <ha-switch
-              .checked=${device.show_chip !== false}
-              @change=${(e: any) => this._handleDeviceChange({
-                target: { configValue: 'show_chip' },
-                detail: { value: e.target.checked }
-              }, index)}
-            ></ha-switch>
-          </ha-formfield>
-
-          <ha-formfield label="Show Slider">
-            <ha-switch
-              .checked=${device.show_slider !== false}
-              @change=${(e: any) => this._handleDeviceChange({
-                target: { configValue: 'show_slider' },
-                detail: { value: e.target.checked }
-              }, index)}
-            ></ha-switch>
-          </ha-formfield>
-        </div>
-
-        <div class="device-colors">
-          <label>Device Colors</label>
-          
-          <ha-textfield
-            label="Icon Color (hex, rgb, rgba)"
-            .value=${device.icon_color || '#FFFFFF'}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'icon_color' },
-              detail: { value: e.target.value }
-            }, index)}
-          ></ha-textfield>
-
-          <ha-textfield
-            label="On Color (hex, rgb, rgba)"
-            .value=${device.color_on || (isLightEntity ? 'light-color' : '#FDD835')}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'color_on' },
-              detail: { value: e.target.value }
-            }, index)}
-            helper="${isLightEntity ? 'Use "light-color" to match light RGB' : 'Color when device is on'}"
-          ></ha-textfield>
-
-          <ha-textfield
-            label="Off Color (hex, rgb, rgba)"
-            .value=${device.color_off || 'rgba(0, 0, 0, 0.2)'}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'color_off' },
-              detail: { value: e.target.value }
-            }, index)}
-          ></ha-textfield>
-
-          <ha-textfield
-            label="Unavailable Color (hex, rgb, rgba)"
-            .value=${device.color_unavailable || 'rgba(128, 128, 128, 0.5)'}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'color_unavailable' },
-              detail: { value: e.target.value }
-            }, index)}
-          ></ha-textfield>
-        </div>
-      </div>
-    `;
-  }
-
-  private _renderDeviceModes(device: DeviceConfig, deviceIndex: number): TemplateResult {
-    const modes = device.modes || [];
-    
-    return html`
-      <div class="modes-section">
-        <div class="modes-header">
-          <label>Discrete Modes</label>
-          <ha-icon-button
-            @click=${() => this._addMode(deviceIndex)}
-            .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
-          ></ha-icon-button>
-        </div>
-        <div class="modes-list">
-          ${modes.map((mode, modeIndex) => html`
-            <div class="mode-item">
-              <ha-textfield
-                label="Label"
-                .value=${mode.label}
-                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
-              ></ha-textfield>
-              <ha-textfield
-                label="Value"
-                type="number"
-                .value=${mode.value}
-                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'value', parseInt(e.target.value))}
-              ></ha-textfield>
-              <ha-textfield
-                label="Percentage"
-                type="number"
-                .value=${mode.percentage}
-                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'percentage', parseInt(e.target.value))}
-              ></ha-textfield>
-              <ha-icon-button
-                @click=${() => this._removeMode(deviceIndex, modeIndex)}
-                .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
-              ></ha-icon-button>
-            </div>
-          `)}
-        </div>
-      </div>
-    `;
-  }
-
-  private _handleBackgroundTypeChange(type: string): void {
+  private _initializeDevices(): void {
     if (!this._config) return;
+
+    // Use configured devices or empty array
+    this.devices = this._config.devices || [];
+  }
+
+  private getAreaName(): string {
+    if (!this.hass || !this._config) return this._config?.area || '';
     
-    const currentBackground = this._config.background;
+    // If a custom name is provided, use it
+    if (this._config.name) return this._config.name;
     
-    if (type === 'static') {
-      // Switching to static color
-      let newColor: string;
-      
-      // Preserve existing static color if we have one
-      if (typeof currentBackground === 'string') {
-        // Already a static color, keep it
-        return;
-      } else if (typeof currentBackground === 'object' && currentBackground.ranges && currentBackground.ranges.length > 0) {
-        // Switching from entity-based, maybe use first color as starting point
-        newColor = currentBackground.ranges[0]?.color || 'var(--card-background-color)';
-      } else {
-        // No existing color, use default
-        newColor = 'var(--card-background-color)';
+    // Otherwise get the area name from Home Assistant
+    const area = this.hass.areas[this._config.area];
+    return area?.name || this._config.area;
+  }
+
+  protected shouldUpdate(changedProperties: PropertyValues): boolean {
+    if (changedProperties.has('hass') || changedProperties.has('_config')) {
+      this.updateCurrentDevice();
+      this.updateSliderValue();
+      return true;
+    }
+    return false;
+  }
+
+  private updateCurrentDevice(): void {
+    if (!this.hass) return;
+
+    if (this.currentDeviceIndex === -1) {
+      for (let i = 0; i < this.devices.length; i++) {
+        const entity = this.hass.states[this.devices[i].entity];
+        if (entity && (entity.state === "on" || entity.state === "playing")) {
+          this.currentDeviceIndex = i;
+          return;
+        }
       }
-      
-      this._updateConfig({ 
-        background: newColor 
-      });
-      
-    } else if (type === 'entity') {
-      // Switching to entity-based color
-      
-      // If already entity-based, keep current config
-      if (typeof currentBackground === 'object' && currentBackground.entity !== undefined) {
-        return;
+      this.currentDeviceIndex = -1;
+    } else {
+      const currentDevice = this.devices[this.currentDeviceIndex];
+      const entity = this.hass.states[currentDevice.entity];
+      if (!entity || (entity.state !== "on" && entity.state !== "playing")) {
+        this.currentDeviceIndex = -1;
+        this.updateCurrentDevice();
       }
-      
-      // Create new entity config
-      const newEntityConfig: any = {
-        entity: '',
-        ranges: []
-      };
-      
-      // If switching from a static color, create a simple on/off range using that color
-      if (typeof currentBackground === 'string' && currentBackground) {
-        newEntityConfig.ranges = [
-          {
-            state: 'on',
-            color: currentBackground
-          },
-          {
-            state: 'off',
-            color: 'var(--state-inactive-color)'
-          }
-        ];
-      }
-      
-      this._updateConfig({ 
-        background: newEntityConfig 
-      });
     }
   }
 
-  private _handleIconColorTypeChange(type: string): void {
-    if (type === 'static') {
-      this._updateConfig({ icon_color: '#FFFFFF' });
-    } else {
-      this._updateConfig({ icon_color: { entity: '', ranges: [] } });
-    }
-  }
-
-  private _handleIconBgTypeChange(type: string): void {
-    if (type === 'static') {
-      this._updateConfig({ icon_background: 'rgba(255, 255, 255, 0.2)' });
-    } else {
-      this._updateConfig({ icon_background: { entity: '', ranges: [] } });
-    }
-  }
-
-  private _addColorRange(configKey: string): void {
-    const config = this._config![configKey] as any;
-    const newRange = { min: 0, max: 100, color: '#FFFFFF' };
-    const ranges = [...(config.ranges || []), newRange];
-    
-    this._updateConfig({
-      [configKey]: { ...config, ranges }
-    });
-  }
-
-  private _updateColorRange(configKey: string, index: number, field: string, value: any): void {
-    const config = this._config![configKey] as any;
-    const ranges = [...(config.ranges || [])];
-    ranges[index] = { ...ranges[index], [field]: value };
-    
-    this._updateConfig({
-      [configKey]: { ...config, ranges }
-    });
-  }
-
-  private _removeColorRange(configKey: string, index: number): void {
-    const config = this._config![configKey] as any;
-    const ranges = [...(config.ranges || [])];
-    ranges.splice(index, 1);
-    
-    this._updateConfig({
-      [configKey]: { ...config, ranges }
-    });
-  }
-
-  private _toggleRangeType(configKey: string, index: number): void {
-    const config = this._config![configKey] as any;
-    const ranges = [...(config.ranges || [])];
-    const range = ranges[index];
-    
-    if (range.state !== undefined) {
-      // Switch to numeric
-      delete range.state;
-      range.min = 0;
-      range.max = 100;
-    } else {
-      // Switch to state
-      delete range.min;
-      delete range.max;
-      range.state = 'on';
-    }
-    
-    ranges[index] = range;
-    this._updateConfig({
-      [configKey]: { ...config, ranges }
-    });
-  }
-
-  private _addDevice(): void {
-    const devices = [...(this._config!.devices || [])];
-    devices.push({
-      entity: '',
-      icon: 'mdi:lightbulb',
-      attribute: 'brightness',
-      scale: 2.55,
-      type: 'continuous',
-      show_chip: true,
-      show_slider: true,
-      color_on: '#FDD835',
-      color_off: 'rgba(0, 0, 0, 0.2)',
-      color_unavailable: 'rgba(128, 128, 128, 0.5)',
-      icon_color: '#FFFFFF'
-    });
-    this._updateConfig({ devices });
-  }
-
-  private _removeDevice(index: number): void {
-    const devices = [...(this._config!.devices || [])];
-    devices.splice(index, 1);
-    this._updateConfig({ devices });
-  }
-
-  private _addMode(deviceIndex: number): void {
-    const devices = [...(this._config!.devices || [])];
-    const modes = [...(devices[deviceIndex].modes || [])];
-    modes.push({
-      label: `Mode ${modes.length + 1}`,
-      value: modes.length,
-      percentage: modes.length * 33
-    });
-    devices[deviceIndex] = { ...devices[deviceIndex], modes };
-    this._updateConfig({ devices });
-  }
-
-  private _updateMode(deviceIndex: number, modeIndex: number, field: string, value: any): void {
-    const devices = [...(this._config!.devices || [])];
-    const modes = [...(devices[deviceIndex].modes || [])];
-    modes[modeIndex] = { ...modes[modeIndex], [field]: value };
-    devices[deviceIndex] = { ...devices[deviceIndex], modes };
-    this._updateConfig({ devices });
-  }
-
-  private _removeMode(deviceIndex: number, modeIndex: number): void {
-    const devices = [...(this._config!.devices || [])];
-    const modes = [...(devices[deviceIndex].modes || [])];
-    modes.splice(modeIndex, 1);
-    devices[deviceIndex] = { ...devices[deviceIndex], modes };
-    this._updateConfig({ devices });
-  }
-
-  private _formatAttributeName(attr: string): string {
-    return attr.split('_').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
-  }
-
-  private _getEntityAttributes(entity: string): string[] {
-    if (!entity || !this.hass) return ['state'];
-    
-    const domain = entity.split('.')[0];
-    const domainAttributes: Record<string, string[]> = {
-      light: ['brightness', 'rgb_color', 'color_temp', 'effect', 'white_value', 'brightness_pct'],
-      media_player: ['volume_level', 'media_position', 'media_duration', 'source', 'sound_mode'],
-      fan: ['percentage', 'preset_mode', 'speed', 'oscillating', 'direction'],
-      climate: ['temperature', 'target_temp_high', 'target_temp_low', 'humidity', 'fan_mode', 'swing_mode'],
-      cover: ['position', 'tilt_position', 'current_position'],
-      vacuum: ['battery_level', 'fan_speed', 'status'],
-      humidifier: ['humidity', 'mode', 'target_humidity'],
-      water_heater: ['temperature', 'target_temp_high', 'target_temp_low', 'operation_mode'],
-      sensor: ['state'],
-      switch: ['state'],
-      camera: ['state'],
-      remote: ['state'],
-      button: ['state'],
-      valve: ['state', 'current_position']
-    };
-    
-    const defaultAttrs = domainAttributes[domain] || ['state'];
-    const stateObj = this.hass.states[entity];
-    
-    if (stateObj?.attributes) {
-      const customAttrs = Object.keys(stateObj.attributes).filter(
-        attr => !['friendly_name', 'icon', 'entity_id', 'supported_features', 'device_class'].includes(attr)
-      );
-      return [...new Set([...defaultAttrs, ...customAttrs])];
-    }
-    
-    return defaultAttrs;
-  }
-
-  private _valueChanged(ev: any): void {
-    if (!this._config || !this.hass) {
+  private updateSliderValue(): void {
+    if (!this.hass || this.currentDeviceIndex === -1) {
+      this.sliderValue = 0;
       return;
     }
 
-    const target = ev.target;
-    const configValue = target.configValue;
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    const entity = this.hass.states[currentDevice.entity];
+    
+    if (!entity || (entity.state !== "on" && entity.state !== "playing")) {
+      this.sliderValue = 0;
+      return;
+    }
 
-    if (configValue) {
-      const newConfig = { ...this._config };
-      const value = target.checked !== undefined ? target.checked : ev.detail?.value ?? target.value;
+    if (currentDevice.type === "discrete" && currentDevice.modes) {
+      const percentage = entity.attributes[currentDevice.attribute || 'percentage'] || 0;
+      const modes = currentDevice.modes;
+      let closestMode = modes[0];
+      let minDiff = Math.abs(percentage - modes[0].percentage);
       
-      newConfig[configValue] = value;
-      this._updateConfig(newConfig);
+      for (let i = 1; i < modes.length; i++) {
+        const diff = Math.abs(percentage - modes[i].percentage);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestMode = modes[i];
+        }
+      }
+      this.sliderValue = closestMode.value;
+    } else {
+      const value = entity.attributes[currentDevice.attribute || 'brightness'];
+      if (value !== undefined && currentDevice.scale) {
+        this.sliderValue = value / currentDevice.scale;
+      }
     }
   }
 
-  private _updateConfig(config: Partial<RoomCardConfig>): void {
-    this._config = { ...this._config!, ...config };
-    const event = new CustomEvent('config-changed', {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true
-    });
-    this.dispatchEvent(event);
+  private getBackgroundColor(): string {
+      if (!this.hass || !this._config) return "";
+
+      const background = this._config.background;
+      
+      // No background configured - return empty string (no default)
+      if (!background) return "";
+      
+      // Static color configuration
+      if (typeof background === 'string') {
+        return background;
+      } 
+      
+      // Entity-based color configuration
+      else if (background.entity) {
+        const entity = this.hass.states[background.entity];
+        
+        // Entity doesn't exist
+        if (!entity) {
+          return "";
+        }
+        
+        // Check if ranges are defined
+        if (background.ranges) {
+          const value = parseFloat(entity.state);
+          
+          // For numeric states, check ranges
+          if (!isNaN(value)) {
+            for (const range of background.ranges) {
+              if (value >= range.min && value <= range.max) {
+                return range.color;
+              }
+            }
+          }
+          
+          // For non-numeric states, could also check exact state matches
+          // You could extend this to support state-based colors like:
+          // { state: "on", color: "#4CAF50" }
+          // { state: "off", color: "#757575" }
+        }
+        
+        // No matching range found
+        return "";
+      }
+      
+      // No valid configuration found
+      return "";
+    }
+
+  private getIconColor(): string {
+    if (!this.hass || !this._config) return "#FFFFFF";
+    
+    const iconColor = this._config.icon_color;
+    if (!iconColor) return "#FFFFFF";
+    
+    if (typeof iconColor === 'string') {
+      return iconColor; // Static color
+    } else if (iconColor.entity) {
+      const entity = this.hass.states[iconColor.entity];
+      if (entity && iconColor.ranges) {
+        const value = parseFloat(entity.state);
+        if (!isNaN(value)) {
+          // Find matching range
+          for (const range of iconColor.ranges) {
+            if (value >= range.min && value <= range.max) {
+              return range.color;
+            }
+          }
+        }
+      }
+    }
+    
+    return "#FFFFFF";
   }
 
-  private _handleDeviceChange(ev: any, index: number): void {
-    const devices = [...(this._config!.devices || [])];
-    const target = ev.target || ev.currentTarget;
-    const configValue = target.configValue;
-    const value = target.checked !== undefined ? target.checked : ev.detail?.value ?? target.value;
+  private getIconBackgroundColor(): string {
+    if (!this.hass || !this._config) return "rgba(255, 255, 255, 0.2)";
     
-    // If entity changed, auto-detect defaults
-    if (configValue === 'entity' && value) {
-      const domain = value.split('.')[0];
-      const defaults = this.deviceDefaults[domain];
-      if (defaults && !devices[index].icon) {
-        devices[index] = { 
-          ...devices[index], 
-          entity: value,
-          icon: defaults.icon,
-          attribute: defaults.attribute,
-          scale: domain === 'light' ? 2.55 : 1,
-          color_on: defaults.color
-        };
-      } else {
-        devices[index] = { ...devices[index], [configValue]: value };
+    const iconBg = this._config.icon_background;
+    if (!iconBg) return "rgba(255, 255, 255, 0.2)";
+    
+    if (typeof iconBg === 'string') {
+      return iconBg; // Static color
+    } else if (iconBg.entity) {
+      const entity = this.hass.states[iconBg.entity];
+      if (entity && iconBg.ranges) {
+        const value = parseFloat(entity.state);
+        if (!isNaN(value)) {
+          // Find matching range
+          for (const range of iconBg.ranges) {
+            if (value >= range.min && value <= range.max) {
+              return range.color;
+            }
+          }
+        }
+      }
+    }
+    
+    return "rgba(255, 255, 255, 0.2)";
+  }
+
+  private getTempHumidity(): string {
+    if (!this.hass || !this._config) return "";
+    
+    const parts: string[] = [];
+    
+    if (this._config.show_temperature !== false && this._config.temperature_sensor) {
+      const tempEntity = this.hass.states[this._config.temperature_sensor];
+      if (tempEntity && tempEntity.state !== 'unavailable') {
+        const temp = parseFloat(tempEntity.state).toFixed(1);
+        const unit = this._config.temperature_unit || 'F';
+        parts.push(`${temp}°${unit}`);
+      }
+    }
+    
+    if (this._config.show_humidity !== false && this._config.humidity_sensor) {
+      const humEntity = this.hass.states[this._config.humidity_sensor];
+      if (humEntity && humEntity.state !== 'unavailable') {
+        const humidity = parseFloat(humEntity.state).toFixed(1);
+        parts.push(`${humidity}%`);
+      }
+    }
+    
+    return parts.join(' / ');
+  }
+
+  private vibrate(): void {
+    if (!this._config?.haptic_feedback) return;
+    
+    if (navigator.vibrate) {
+      navigator.vibrate(20);
+    }
+  }
+
+  private handleIconClick(): void {
+    if (!this.hass || this.isDragging) return; // Don't switch while dragging
+    
+    const startIndex = this.currentDeviceIndex;
+    let nextIndex = (startIndex + 1) % this.devices.length;
+    let found = false;
+    
+    for (let i = 0; i < this.devices.length; i++) {
+      const device = this.devices[nextIndex];
+      const entity = this.hass.states[device.control_entity || device.entity];
+      
+      if (entity && (entity.state === "on" || entity.state === "playing")) {
+        this.currentDeviceIndex = nextIndex;
+        found = true;
+        break;
+      }
+      nextIndex = (nextIndex + 1) % this.devices.length;
+    }
+    
+    if (!found) {
+      this.currentDeviceIndex = -1;
+    }
+    
+    this.updateSliderValue();
+    this.vibrate();
+    this.requestUpdate();
+  }
+
+  private handleChipClick(index: number): void {
+    if (!this.hass) return;
+
+    const device = this.devices[index];
+    const entity = this.hass.states[device.entity];
+    
+    if (!entity) return;
+    
+    const isOn = entity.state === "on" || entity.state === "playing";
+    
+    if (isOn) {
+      const domain = device.entity.split('.')[0];
+      this.hass.callService(domain, "turn_off", {
+        entity_id: device.entity
+      });
+      
+      if (this.currentDeviceIndex === index) {
+        this.currentDeviceIndex = -1;
+        setTimeout(() => {
+          this.updateCurrentDevice();
+          this.updateSliderValue();
+          this.requestUpdate();
+        }, 100);
       }
     } else {
-      devices[index] = { ...devices[index], [configValue]: value };
+      const domain = device.entity.split('.')[0];
+      const service_data: any = { entity_id: device.entity };
+      
+      if (domain === "light") {
+        service_data.brightness = 128;
+      } else if (domain === "media_player") {
+        service_data.volume_level = 0.3;
+      } else if (domain === "fan") {
+        service_data.percentage = 33;
+      }
+      
+      this.hass.callService(domain, "turn_on", service_data);
+      
+      this.currentDeviceIndex = index;
+      setTimeout(() => {
+        this.updateSliderValue();
+        this.requestUpdate();
+      }, 100);
     }
     
-    this._updateConfig({ devices });
+    this.vibrate();
+  }
+
+  private getChipColor(device: DeviceConfig, entity: string): string {
+    if (!this.hass) return device.color_unavailable || "rgba(128, 128, 128, 0.5)";
+    
+    const stateObj = this.hass.states[entity];
+    
+    // Handle unavailable state
+    if (!stateObj || stateObj.state === 'unavailable') {
+      return device.color_unavailable || "rgba(128, 128, 128, 0.5)";
+    }
+    
+    // Handle off state
+    if (stateObj.state !== "on" && stateObj.state !== "playing") {
+      return device.color_off || "rgba(0, 0, 0, 0.2)";
+    }
+    
+    // Handle on state
+    const onColor = device.color_on;
+    
+    // Special handling for lights with RGB
+    if (onColor === 'light-color' && entity.includes('light') && stateObj.attributes.rgb_color) {
+      return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
+    }
+    
+    // Return configured on color
+    return onColor || "#FDD835";
+  }
+
+  private getSliderColor(device: DeviceConfig, entity: any): string {
+    const onColor = device.color_on;
+    
+    // Special handling for lights with RGB
+    if (onColor === 'light-color' && entity?.attributes?.rgb_color) {
+      return `rgb(${entity.attributes.rgb_color.join(",")})`;
+    }
+    
+    // Return configured on color or default
+    return onColor || "#2196F3";
+  }
+
+  // Circular slider methods
+  private degreesToRadians(degrees: number): number {
+    return degrees * Math.PI / 180;
+  }
+
+  private radiansToDegrees(radians: number): number {
+    return radians * 180 / Math.PI;
+  }
+
+  private normalizeAngle(angle: number): number {
+    while (angle < 0) angle += 360;
+    while (angle >= 360) angle -= 360;
+    return angle;
+  }
+
+  private angleToValue(angle: number): number {
+    let normalizedAngle = this.normalizeAngle(angle);
+    let normalizedStart = this.normalizeAngle(this.startAngle);
+    
+    let angleFromStart = normalizedAngle - normalizedStart;
+    if (angleFromStart < 0) angleFromStart += 360;
+    
+    if (angleFromStart > this.totalAngle) {
+      let distToStart = Math.min(angleFromStart, 360 - angleFromStart);
+      let distToEnd = Math.min(
+        Math.abs(angleFromStart - this.totalAngle), 
+        360 - Math.abs(angleFromStart - this.totalAngle)
+      );
+      return distToStart < distToEnd ? 0 : 1;
+    }
+    
+    // Clamp the value between 0 and 1
+    const value = angleFromStart / this.totalAngle;
+    return Math.max(0, Math.min(1, value));
+  }
+
+  private valueToAngle(value: number): number {
+    return this.startAngle + (value * this.totalAngle);
+  }
+
+  private pointToAngle(x: number, y: number, centerX: number, centerY: number): number {
+    let angle = Math.atan2(y - centerY, x - centerX);
+    return this.radiansToDegrees(angle);
+  }
+
+  private snapToNearestMode(value: number): number {
+    if (this.currentDeviceIndex === -1) return value;
+    
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    if (currentDevice.type !== "discrete" || !currentDevice.modes) return value;
+    
+    const modes = currentDevice.modes;
+    let closestMode = modes[0];
+    let minDiff = Math.abs(value - modes[0].value);
+    
+    for (let i = 1; i < modes.length; i++) {
+      const diff = Math.abs(value - modes[i].value);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestMode = modes[i];
+      }
+    }
+    
+    return closestMode.value;
+  }
+
+  private handlePointerDown(e: PointerEvent): void {
+    const svg = e.currentTarget as SVGElement;
+    if (!svg || this.currentDeviceIndex === -1) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation(); // Stop all event propagation
+    
+    this.isDragging = true;
+    this.actionTaken = true;
+    
+    svg.setPointerCapture(e.pointerId);
+    this.handlePointerMove(e);
+  }
+
+  private handlePointerMove(e: PointerEvent): void {
+    if (!this.isDragging || !this.actionTaken) return;
+    
+    const svg = this.shadowRoot?.querySelector(".slider-svg") as SVGElement;
+    if (!svg) return;
+    
+    const rect = svg.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    const angle = this.pointToAngle(e.clientX, e.clientY, centerX, centerY);
+    let newValue = this.angleToValue(angle);
+    
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    if (currentDevice && currentDevice.type === "discrete") {
+      newValue = this.snapToNearestMode(newValue);
+      
+      if (Math.abs(newValue - this.sliderValue) > 0.01) {
+        this.vibrate();
+      }
+    } else {
+      const valueDiff = Math.abs(newValue - this.sliderValue);
+      if (valueDiff < 0.005 && newValue !== 0 && newValue !== 1) {
+        return;
+      }
+    }
+    
+    this.sliderValue = newValue;
+    this.requestUpdate();
+  }
+
+  private handlePointerUp(e: PointerEvent): void {
+    if (!this.isDragging) return;
+    
+    const svg = e.currentTarget as SVGElement;
+    if (svg) {
+      svg.releasePointerCapture(e.pointerId);
+    }
+    
+    this.isDragging = false;
+    this.thumbTapped = false;
+    
+    if (this.actionTaken) {
+      this.updateDeviceValue(this.sliderValue);
+      this.actionTaken = false;
+    }
+    
+    this.requestUpdate();
+  }
+
+  private updateDeviceValue(value: number): void {
+    if (!this.hass || this.currentDeviceIndex === -1) return;
+    
+    const currentDevice = this.devices[this.currentDeviceIndex];
+    const controlEntity = currentDevice.control_entity || currentDevice.entity;
+    
+    if (currentDevice.type === "discrete" && currentDevice.modes) {
+      const modes = currentDevice.modes;
+      let selectedMode = modes[0];
+      
+      for (const mode of modes) {
+        if (Math.abs(value - mode.value) < 0.01) {
+          selectedMode = mode;
+          break;
+        }
+      }
+      
+      if (selectedMode.percentage === 0) {
+        this.hass.callService("fan", "turn_off", {
+          entity_id: controlEntity
+        });
+      } else {
+        this.hass.callService("fan", "set_percentage", {
+          entity_id: controlEntity,
+          percentage: selectedMode.percentage
+        });
+      }
+    } else {
+      const actualValue = Math.round(value * (currentDevice.scale || 100));
+
+      if (currentDevice.attribute === "brightness") {
+        if (actualValue === 0) {
+          this.hass.callService("light", "turn_off", {
+            entity_id: controlEntity
+          });
+        } else {
+          this.hass.callService("light", "turn_on", {
+            entity_id: controlEntity,
+            brightness: actualValue,
+          });
+        }
+      } else if (currentDevice.attribute === "volume_level") {
+        if (value === 0) {
+          this.hass.callService("media_player", "volume_mute", {
+            entity_id: controlEntity,
+            is_volume_muted: true
+          });
+        } else {
+          this.hass.callService("media_player", "volume_set", {
+            entity_id: controlEntity,
+            volume_level: value,
+          });
+        }
+      }
+    }
+  }
+
+  protected render(): TemplateResult {
+    if (!this._config || !this.hass) {
+      return html``;
+    }
+
+    const backgroundColor = this.getBackgroundColor();
+    const iconColor = this.getIconColor();
+    const iconBackgroundColor = this.getIconBackgroundColor();
+    const tempHumidity = this.getTempHumidity();
+    const roomName = this.getAreaName();
+    
+    const hasActiveDevice = this.currentDeviceIndex !== -1;
+    const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
+    const deviceEntity = currentDevice ? this.hass.states[currentDevice.control_entity || currentDevice.entity] : null;
+    const isDeviceOn = deviceEntity && (deviceEntity.state === "on" || deviceEntity.state === "playing");
+    const showSlider = currentDevice?.show_slider !== false;
+
+    // Calculate positions
+    const centerX = 75;
+    const centerY = 75;
+    const radius = 56;
+    
+    // Calculate thumb position
+    const thumbAngle = this.valueToAngle(this.sliderValue);
+    const thumbAngleRad = this.degreesToRadians(thumbAngle);
+    const thumbX = centerX + radius * Math.cos(thumbAngleRad);
+    const thumbY = centerY + radius * Math.sin(thumbAngleRad);
+    
+    // Calculate arc endpoints
+    const startAngleRad = this.degreesToRadians(this.startAngle);
+    const endAngleRad = this.degreesToRadians(this.endAngle);
+    const startX = centerX + radius * Math.cos(startAngleRad);
+    const startY = centerY + radius * Math.sin(startAngleRad);
+    const endX = centerX + radius * Math.cos(endAngleRad);
+    const endY = centerY + radius * Math.sin(endAngleRad);
+    
+    // Calculate the current angle for the progress arc
+    const progressAngle = this.sliderValue * this.totalAngle;
+    const largeArcFlag = progressAngle > 180 ? 1 : 0;
+
+    // Get slider color
+    let sliderColor = '#2196F3';
+    if (currentDevice) {
+      sliderColor = this.getSliderColor(currentDevice, deviceEntity);
+    }
+
+    // Organize devices into columns
+    const chipColumns = this._config.chip_columns || 1;
+    const deviceColumns: DeviceConfig[][] = [];
+    const visibleDevices = this.devices.filter(d => d.show_chip !== false);
+    
+    for (let i = 0; i < chipColumns; i++) {
+      deviceColumns[i] = [];
+    }
+    
+    visibleDevices.forEach((device, index) => {
+      const columnIndex = index % chipColumns;
+      deviceColumns[columnIndex].push(device);
+    });
+
+    return html`
+      <div class="card-container" style="background-color: ${backgroundColor}">
+        <div class="main-content">
+          <div class="title-section">
+            <div class="room-name">${roomName}</div>
+            ${tempHumidity ? html`<div class="temp-humidity">${tempHumidity}</div>` : ''}
+          </div>
+
+          <div class="icon-section">
+            <div class="icon-container">
+              <div class="icon-background" 
+                  style="background-color: ${iconBackgroundColor}"
+                  @click=${this.handleIconClick}>
+                <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
+              </div>
+              
+              ${isDeviceOn && hasActiveDevice && currentDevice && showSlider ? html`
+              <div class="slider-container">
+                <svg class="slider-svg" width="150" height="150" viewBox="0 0 150 150"
+                  @pointerdown=${this.handlePointerDown}
+                  @pointermove=${this.handlePointerMove}
+                  @pointerup=${this.handlePointerUp}
+                  @pointercancel=${this.handlePointerUp}>
+                  <!-- Track arc -->
+                  <path
+                    class="slider-track"
+                    d="M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}"
+                  />
+                  <!-- Progress arc -->
+                  <path
+                    class="slider-progress"
+                    style="stroke: ${sliderColor}"
+                    d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
+                  />
+                  <!-- Thumb -->
+                  <circle
+                    class="slider-thumb ${this.isDragging ? 'dragging' : ''}"
+                    style="fill: ${sliderColor}"
+                    cx="${thumbX}"
+                    cy="${thumbY}"
+                    r="16"
+                  />
+                  <!-- Icon on thumb -->
+                  <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
+                      <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_color || 'white'};"></ha-icon>
+                    </div>
+                  </foreignObject>
+                </svg>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="chips-section">
+          ${deviceColumns.map((column, colIndex) => html`
+            <div class="chips-column">
+              ${column.map((device) => {
+                const deviceIndex = this.devices.indexOf(device);
+                const controlEntity = device.control_entity || device.entity;
+                const entity = this.hass!.states[controlEntity];
+                const isOn = entity && (entity.state === "on" || entity.state === "playing");
+                const isUnavailable = !entity || entity.state === 'unavailable';
+                const chipColor = this.getChipColor(device, controlEntity);
+                const iconColor = device.icon_color || (isOn ? 'white' : 'rgba(255, 255, 255, 0.6)');
+                
+                return html`
+                  <div
+                    class="chip ${isUnavailable ? 'unavailable' : ''} ${isOn ? 'on' : 'off'}"
+                    style="background-color: ${chipColor}; color: ${iconColor}"
+                    @click=${() => this.handleChipClick(deviceIndex)}
+                  >
+                    <ha-icon icon="${device.icon}"></ha-icon>
+                  </div>
+                `;
+              })}
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+
+  disconnectedCallback(): void {
+    if (this._handleMove) {
+      document.removeEventListener('pointermove', this._handleMove);
+    }
+    if (this._handleUp) {
+      document.removeEventListener('pointerup', this._handleUp);
+      document.removeEventListener('pointercancel', this._handleUp);
+    }
+    super.disconnectedCallback();
+  }
+
+  public getCardSize(): number {
+    return 2;
   }
 
   static get styles(): CSSResult {
     return css`
-      .card-config {
+      :host {
+        display: block;
+      }
+
+      .card-container {
+        height: 100%;
+        border-radius: 22px;
+        display: grid;
+        grid-template-areas:
+          "title chips"
+          "icon chips";
+        grid-template-rows: min-content 1fr;
+        grid-template-columns: 1fr min-content;
+        position: relative;
+        transition: background-color 0.3s ease;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        overflow: hidden;
+      }
+
+      .title-section {
+        grid-area: title;
+        font-size: 14px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        align-items: flex-start;
+        margin-left: 15px;
+        padding-top: 5px;
       }
 
-      .section-content {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        padding: 16px;
-      }
-
-      .info-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px;
-        background: var(--secondary-background-color);
-        border-radius: 4px;
-      }
-
-      .info-label {
+      .room-name {
         font-weight: 500;
-        color: var(--secondary-text-color);
+        color: #000000;
+        margin-top: 5px;
       }
 
-      .info-value {
-        font-weight: 600;
+      .temp-humidity {
+        font-size: 12px;
+        color: #353535;
+        font-weight: 400;
       }
 
-      ha-formfield {
+      .icon-section {
+        grid-area: icon;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 8px 0;
+        justify-content: flex-start;
+        position: relative;
+        padding-top: 15px;
       }
 
-      .switches,
-      .device-toggles {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+      .icon-container {
+        position: relative;
+        width: 110px;
+        height: 110px;
+        margin-left: -10px;
+        margin-bottom: -10px;
+        cursor: pointer;
       }
 
-      .devices-header,
-      .modes-header,
-      .ranges-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 8px;
-      }
-
-      .devices-header label,
-      .modes-header label,
-      .ranges-header label {
-        font-weight: 500;
-        font-size: 1.1em;
-      }
-
-      .device-config {
-        padding: 12px;
-        border: 1px solid var(--divider-color);
-        border-radius: 8px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .device-header {
+      .icon-background {
+        position: absolute;
+        width: 110px;
+        height: 110px;
+        border-radius: 50%;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        font-weight: 500;
-        margin-bottom: 8px;
+        justify-content: center;
+        transition: all 0.3s ease;
+        z-index: 1;
+        background-color: rgba(255, 255, 255, 0.2);
       }
 
-      .modes-section,
-      .color-ranges {
-        padding: 12px;
-        background: var(--secondary-background-color);
-        border-radius: 8px;
+      .icon-background ha-icon {
+        --mdc-icon-size: 75px;
+        color: white;
+        transition: all 0.3s ease;
       }
 
-      .modes-list,
-      .ranges-list {
+      .slider-container {
+        position: absolute;
+        width: 150px;
+        height: 150px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+      }
+
+      .slider-svg {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .slider-track {
+        fill: none;
+        stroke: rgb(187, 187, 187);
+        stroke-width: 12;
+        pointer-events: stroke;
+      }
+
+      .slider-progress {
+        fill: none;
+        stroke-width: 12;
+        stroke-linecap: round;
+        transition: d 0.3s ease;
+        pointer-events: stroke;
+      }
+
+      .slider-thumb {
+        transition: all 0.2s ease;
+        cursor: pointer;
+        pointer-events: auto;
+      }
+
+      .slider-thumb.dragging {
+        r: 20;
+      }
+
+      .slider-thumb-icon {
+        pointer-events: none;
+      }
+
+      .chips-section {
+        grid-area: chips;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-      }
-
-      .mode-item,
-      .range-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .range-inputs {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex: 1;
-      }
-
-      .mode-item ha-textfield,
-      .range-item ha-textfield {
-        flex: 1;
-      }
-
-      .color-config-section {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        padding: 12px;
-        background: var(--secondary-background-color);
-        border-radius: 8px;
-      }
-
-      .color-config-section label {
-        font-weight: 500;
-        margin-bottom: 4px;
-      }
-
-      .device-colors {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 12px;
-        background: var(--secondary-background-color);
-        border-radius: 8px;
-      }
-
-      .device-colors label {
-        font-weight: 500;
-        margin-bottom: 4px;
-      }
-
-      ha-expansion-panel {
+        margin-right: 8px;
         margin-top: 8px;
+        margin-bottom: 8px;
+      }
+        
+      .chips-column {
+        display: flex;
+        flex-direction: column;
+        gap: px;
       }
 
-      ha-icon-button {
-        color: var(--primary-color);
+      .chip {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 40px;
+        width: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
       }
 
-      ha-icon-button[slot="trigger"] {
-        color: var(--secondary-text-color);
+      .chip:active {
+        transform: scale(0.95);
+      }
+
+      .chip ha-icon {
+        --mdc-icon-size: 25px;
+      }
+
+      .unavailable {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .unavailable:active {
+        transform: none;
       }
     `;
+  }
+
+  static getConfigElement() {
+    return document.createElement('room-card-editor');
+  }
+
+  static getStubConfig(): RoomCardConfig {
+    return {
+      type: 'custom:room-card',
+      area: '',
+      name: '',
+      temperature_sensor: '',
+      humidity_sensor: '',
+      show_temperature: true,
+      show_humidity: true,
+      temperature_unit: 'F',
+      haptic_feedback: true,
+      devices: []
+    };
   }
 }
 
 // Declare global types
 declare global {
+  interface Window {
+    customCards: Array<object>;
+  }
   interface HTMLElementTagNameMap {
-    'room-card-editor': RoomCardEditor;
+    'room-card': RoomCard;
   }
 }
