@@ -34,7 +34,20 @@ export class RoomCardEditor extends LitElement {
   };
 
   public setConfig(config: RoomCardConfig): void {
-    this._config = config;
+    // Don't modify the config if it already has a background set
+    // Only apply default for truly new cards (no background property at all)
+    this._config = {
+      ...config
+    };
+    
+    // Only set default if background is undefined (not if it's an empty string or other value)
+    if (this._config.background === undefined) {
+      this._config = {
+        ...this._config,
+        background: 'var(--card-background-color)'
+      };
+    }
+    
     this._loadHelpers();
   }
 
@@ -111,8 +124,13 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _renderAppearanceSection(): TemplateResult {
-    const backgroundType = typeof this._config!.background === 'object' && this._config!.background?.entity ? 
-      'entity' : 'static';
+    // Properly detect background type
+    let backgroundType = 'static';
+    if (this._config!.background && typeof this._config!.background === 'object' && 'entity' in this._config!.background) {
+      backgroundType = 'entity';
+    }
+    
+    // Same for icon colors
     const iconColorType = typeof this._config!.icon_color === 'object' && this._config!.icon_color?.entity ? 
       'entity' : 'static';
     const iconBgColorType = typeof this._config!.icon_background === 'object' && this._config!.icon_background?.entity ? 
@@ -154,12 +172,13 @@ export class RoomCardEditor extends LitElement {
 
             ${backgroundType === 'static' ? html`
               <ha-textfield
-                label="Background Color (hex, rgb, rgba)"
-                .value=${this._config!.background || 'var(--primary-background-color)'}
+                label="Background Color"
+                .value=${typeof this._config!.background === 'string' ? this._config!.background : 'var(--card-background-color)'}
                 @input=${(e: any) => {
                   this._updateConfig({ background: e.target.value });
                 }}
-                helper="Use CSS values like #FFFFFF, rgb(255,255,255), rgba(255,255,255,0.5), or var(--primary-background-color)"
+                helper="Theme variables: var(--card-background-color), var(--primary-background-color) | Colors: #FFFFFF, rgb(), rgba() | Empty for transparent"
+                placeholder="var(--card-background-color)"
               ></ha-textfield>
             ` : html`
               <ha-selector
@@ -290,20 +309,28 @@ export class RoomCardEditor extends LitElement {
           ${ranges.map((range, index) => html`
             <div class="range-item">
               <div class="range-inputs">
+                ${range.state !== undefined ? html`
+                  <ha-textfield
+                    label="State"
+                    .value=${range.state || ''}
+                    @input=${(e: any) => this._updateColorRange(configKey, index, 'state', e.target.value)}
+                  ></ha-textfield>
+                ` : html`
+                  <ha-textfield
+                    label="Min"
+                    type="number"
+                    .value=${range.min !== undefined ? range.min : ''}
+                    @input=${(e: any) => this._updateColorRange(configKey, index, 'min', parseFloat(e.target.value))}
+                  ></ha-textfield>
+                  <ha-textfield
+                    label="Max"
+                    type="number"
+                    .value=${range.max !== undefined ? range.max : ''}
+                    @input=${(e: any) => this._updateColorRange(configKey, index, 'max', parseFloat(e.target.value))}
+                  ></ha-textfield>
+                `}
                 <ha-textfield
-                  label="Min"
-                  type="number"
-                  .value=${range.min !== undefined ? range.min : ''}
-                  @input=${(e: any) => this._updateColorRange(configKey, index, 'min', parseFloat(e.target.value))}
-                ></ha-textfield>
-                <ha-textfield
-                  label="Max"
-                  type="number"
-                  .value=${range.max !== undefined ? range.max : ''}
-                  @input=${(e: any) => this._updateColorRange(configKey, index, 'max', parseFloat(e.target.value))}
-                ></ha-textfield>
-                <ha-textfield
-                  label="Color (hex, rgb, rgba)"
+                  label="Color"
                   .value=${range.color || ''}
                   @input=${(e: any) => this._updateColorRange(configKey, index, 'color', e.target.value)}
                 ></ha-textfield>
@@ -312,47 +339,20 @@ export class RoomCardEditor extends LitElement {
                   .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
                 ></ha-icon-button>
               </div>
+              <ha-button-menu>
+                <ha-icon-button
+                  slot="trigger"
+                  .path=${'M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z'}
+                ></ha-icon-button>
+                <ha-list-item @click=${() => this._toggleRangeType(configKey, index)}>
+                  ${range.state !== undefined ? 'Switch to Numeric Range' : 'Switch to State Match'}
+                </ha-list-item>
+              </ha-button-menu>
             </div>
           `)}
         </div>
       </div>
     `;
-  }
-
-  private _addColorRange(configKey: string): void {
-    const configValue = this._config![configKey] as any || {};
-    const ranges = [...(configValue.ranges || [])];
-    ranges.push({ min: 0, max: 100, color: '#808080' });
-    this._updateConfig({
-      [configKey]: {
-        ...configValue,
-        ranges
-      }
-    });
-  }
-
-  private _updateColorRange(configKey: string, index: number, field: string, value: any): void {
-    const configValue = this._config![configKey] as any || {};
-    const ranges = [...(configValue.ranges || [])];
-    ranges[index] = { ...ranges[index], [field]: value };
-    this._updateConfig({
-      [configKey]: {
-        ...configValue,
-        ranges
-      }
-    });
-  }
-
-  private _removeColorRange(configKey: string, index: number): void {
-    const configValue = this._config![configKey] as any || {};
-    const ranges = [...(configValue.ranges || [])];
-    ranges.splice(index, 1);
-    this._updateConfig({
-      [configKey]: {
-        ...configValue,
-        ranges
-      }
-    });
   }
 
   private _renderTemperatureSection(): TemplateResult {
@@ -365,15 +365,8 @@ export class RoomCardEditor extends LitElement {
         <div class="section-content">
           <ha-selector
             .hass=${this.hass}
-            .selector=${{ 
-              entity: {
-                filter: {
-                  domain: 'sensor',
-                  device_class: 'temperature'
-                }
-              }
-            }}
-            .value=${this._config!.temperature_sensor || ''}
+            .selector=${{ entity: { domain: 'sensor', device_class: 'temperature' } }}
+            .value=${this._config!.temperature_sensor}
             .label=${'Temperature Sensor'}
             @value-changed=${(e: any) => this._valueChanged({
               target: { configValue: 'temperature_sensor' },
@@ -383,15 +376,8 @@ export class RoomCardEditor extends LitElement {
 
           <ha-selector
             .hass=${this.hass}
-            .selector=${{ 
-              entity: {
-                filter: {
-                  domain: 'sensor',
-                  device_class: 'humidity'
-                }
-              }
-            }}
-            .value=${this._config!.humidity_sensor || ''}
+            .selector=${{ entity: { domain: 'sensor', device_class: 'humidity' } }}
+            .value=${this._config!.humidity_sensor}
             .label=${'Humidity Sensor'}
             @value-changed=${(e: any) => this._valueChanged({
               target: { configValue: 'humidity_sensor' },
@@ -426,8 +412,8 @@ export class RoomCardEditor extends LitElement {
             @selected=${this._valueChanged}
             @closed=${(e: Event) => e.stopPropagation()}
           >
-            <ha-list-item value="C">Celsius</ha-list-item>
             <ha-list-item value="F">Fahrenheit</ha-list-item>
+            <ha-list-item value="C">Celsius</ha-list-item>
           </ha-select>
         </div>
       </ha-expansion-panel>
@@ -445,7 +431,7 @@ export class RoomCardEditor extends LitElement {
       >
         <div class="section-content">
           <div class="devices-header">
-            <h3>Devices</h3>
+            <label>Device Controls</label>
             <ha-icon-button
               @click=${this._addDevice}
               .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
@@ -453,272 +439,282 @@ export class RoomCardEditor extends LitElement {
           </div>
 
           <ha-textfield
-            label="Number of Chip Columns"
+            label="Chip Columns"
             type="number"
-            .value=${this._config!.chip_columns || 1}
-            .configValue=${'chip_columns'}
-            @input=${this._valueChanged}
             min="1"
             max="4"
+            .value=${this._config!.chip_columns || 1}
+            @input=${(e: any) => {
+              const value = parseInt(e.target.value);
+              if (value >= 1 && value <= 4) {
+                this._updateConfig({ chip_columns: value });
+              }
+            }}
             helper="Number of columns for device chips (1-4)"
           ></ha-textfield>
 
-          ${devices.map((device, index) => this._renderDevice(device, index))}
+          ${devices.map((device, index) => this._renderDeviceConfig(device, index))}
         </div>
       </ha-expansion-panel>
     `;
   }
 
-  private _renderDevice(device: DeviceConfig, index: number): TemplateResult {
-    const entityAttrs = device.entity ? this._getEntityAttributes(device.entity) : [];
-    const isLightEntity = device.entity?.startsWith('light.');
-    const friendlyName = this._getFriendlyName(device.entity);
+  private _renderDeviceConfig(device: DeviceConfig, index: number): TemplateResult {
+    const entity = device.entity ? this.hass!.states[device.entity] : null;
+    const domain = device.entity ? device.entity.split('.')[0] : '';
+    const isLightEntity = domain === 'light';
+    const attributes = this._getEntityAttributes(device.entity);
 
     return html`
-      <ha-card outlined>
-        <ha-expansion-panel
-          .header=${friendlyName || 'New Device'}
-          .secondary=${device.attribute || 'brightness'}
+      <div class="device-config">
+        <div class="device-header">
+          <span>Device ${index + 1}</span>
+          <ha-icon-button
+            @click=${() => this._removeDevice(index)}
+            .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
+          ></ha-icon-button>
+        </div>
+
+        <ha-selector
+          .hass=${this.hass}
+          .selector=${{ entity: {} }}
+          .value=${device.entity}
+          .label=${'Entity'}
+          @value-changed=${(e: any) => this._handleDeviceChange({
+            target: { configValue: 'entity' },
+            detail: { value: e.detail.value }
+          }, index)}
+        ></ha-selector>
+
+        <ha-textfield
+          label="Control Entity (Optional)"
+          .value=${device.control_entity || ''}
+          @input=${(e: any) => this._handleDeviceChange({
+            target: { configValue: 'control_entity' },
+            detail: { value: e.target.value }
+          }, index)}
+          helper="Leave empty to use the same entity for control"
+        ></ha-textfield>
+
+        <ha-selector
+          .hass=${this.hass}
+          .selector=${{ icon: {} }}
+          .value=${device.icon || ''}
+          .label=${'Icon'}
+          @value-changed=${(e: any) => this._handleDeviceChange({
+            target: { configValue: 'icon' },
+            detail: { value: e.detail.value }
+          }, index)}
+        ></ha-selector>
+
+        <ha-select
+          naturalMenuWidth
+          fixedMenuPosition
+          label="Attribute"
+          .value=${device.attribute || (this.deviceDefaults[domain]?.attribute || 'brightness')}
+          @selected=${(e: any) => this._handleDeviceChange({
+            target: { configValue: 'attribute' },
+            detail: { value: e.target.value }
+          }, index)}
+          @closed=${(e: Event) => e.stopPropagation()}
         >
-          <div class="device-config">
-            <ha-icon-button-arrow-prev
-              slot="icons"
-              @click=${() => this._removeDevice(index)}
-            ></ha-icon-button-arrow-prev>
+          ${attributes.map(attr => html`
+            <ha-list-item value="${attr}">${this._formatAttributeName(attr)}</ha-list-item>
+          `)}
+        </ha-select>
 
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ 
-                entity: {
-                  multiple: false,
-                  filter: [
-                    { domain: 'light' },
-                    { domain: 'switch' },
-                    { domain: 'fan' },
-                    { domain: 'media_player' },
-                    { domain: 'climate' },
-                    { domain: 'cover' },
-                    { domain: 'vacuum' },
-                    { domain: 'sensor' },
-                    { domain: 'camera' },
-                    { domain: 'remote' },
-                    { domain: 'button' },
-                    { domain: 'humidifier' },
-                    { domain: 'valve' },
-                    { domain: 'water_heater' },
-                    { domain: 'group' }
-                  ]
-                }
-              }}
-              .value=${device.entity || ''}
-              .label=${'Entity'}
-              @value-changed=${(e: any) => this._handleDeviceChange({
-                target: { configValue: 'entity' },
-                detail: { value: e.detail.value }
+        <ha-textfield
+          label="Scale Factor"
+          type="number"
+          .value=${device.scale || (domain === 'light' ? 2.55 : 1)}
+          @input=${(e: any) => this._handleDeviceChange({
+            target: { configValue: 'scale' },
+            detail: { value: parseFloat(e.target.value) }
+          }, index)}
+          helper="Multiplier for slider values (e.g., 2.55 for brightness 0-255)"
+        ></ha-textfield>
+
+        <ha-select
+          naturalMenuWidth
+          fixedMenuPosition
+          label="Control Type"
+          .value=${device.type || 'continuous'}
+          @selected=${(e: any) => this._handleDeviceChange({
+            target: { configValue: 'type' },
+            detail: { value: e.target.value }
+          }, index)}
+          @closed=${(e: Event) => e.stopPropagation()}
+        >
+          <ha-list-item value="continuous">Continuous Slider</ha-list-item>
+          <ha-list-item value="discrete">Discrete Modes</ha-list-item>
+        </ha-select>
+
+        ${device.type === 'discrete' ? this._renderDeviceModes(device, index) : ''}
+
+        <div class="device-toggles">
+          <ha-formfield label="Show Chip">
+            <ha-switch
+              .checked=${device.show_chip !== false}
+              @change=${(e: any) => this._handleDeviceChange({
+                target: { configValue: 'show_chip' },
+                detail: { value: e.target.checked }
               }, index)}
-            ></ha-selector>
+            ></ha-switch>
+          </ha-formfield>
 
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Attribute"
-              .value=${device.attribute || 'brightness'}
-              .configValue=${'attribute'}
-              @selected=${(e: any) => this._handleDeviceChange(e, index)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              ${entityAttrs.map(attr => html`
-                <ha-list-item value=${attr}>${attr}</ha-list-item>
-              `)}
-            </ha-select>
-
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ icon: {} }}
-              .value=${device.icon || 'mdi:lightbulb'}
-              .label=${'Icon'}
-              @value-changed=${(e: any) => this._handleDeviceChange({
-                target: { configValue: 'icon' },
-                detail: { value: e.detail.value }
+          <ha-formfield label="Show Slider">
+            <ha-switch
+              .checked=${device.show_slider !== false}
+              @change=${(e: any) => this._handleDeviceChange({
+                target: { configValue: 'show_slider' },
+                detail: { value: e.target.checked }
               }, index)}
-            ></ha-selector>
+            ></ha-switch>
+          </ha-formfield>
+        </div>
 
-            <!-- Display Options -->
-            <div class="display-options">
-              <ha-formfield label="Show Chip">
-                <ha-switch
-                  .checked=${device.show_chip !== false}
-                  @change=${(e: any) => this._handleDeviceChange({
-                    target: { configValue: 'show_chip' },
-                    detail: { value: e.target.checked }
-                  }, index)}
-                ></ha-switch>
-              </ha-formfield>
+        <div class="device-colors">
+          <label>Device Colors</label>
+          
+          <ha-textfield
+            label="Icon Color (hex, rgb, rgba)"
+            .value=${device.icon_color || '#FFFFFF'}
+            @input=${(e: any) => this._handleDeviceChange({
+              target: { configValue: 'icon_color' },
+              detail: { value: e.target.value }
+            }, index)}
+          ></ha-textfield>
 
-              <ha-formfield label="Show Slider">
-                <ha-switch
-                  .checked=${device.show_slider !== false}
-                  @change=${(e: any) => this._handleDeviceChange({
-                    target: { configValue: 'show_slider' },
-                    detail: { value: e.target.checked }
-                  }, index)}
-                ></ha-switch>
-              </ha-formfield>
-            </div>
+          <ha-textfield
+            label="On Color (hex, rgb, rgba)"
+            .value=${device.color_on || (isLightEntity ? 'light-color' : '#FDD835')}
+            @input=${(e: any) => this._handleDeviceChange({
+              target: { configValue: 'color_on' },
+              detail: { value: e.target.value }
+            }, index)}
+            helper="${isLightEntity ? 'Use "light-color" to match light RGB' : 'Color when device is on'}"
+          ></ha-textfield>
 
-            <!-- Color Configuration -->
-            <div class="device-colors">
-              <label>Device Colors</label>
-              
-              <ha-textfield
-                label="Icon Color (hex, rgb, rgba)"
-                .value=${device.icon_color || '#FFFFFF'}
-                @input=${(e: any) => this._handleDeviceChange({
-                  target: { configValue: 'icon_color' },
-                  detail: { value: e.target.value }
-                }, index)}
-              ></ha-textfield>
+          <ha-textfield
+            label="Off Color (hex, rgb, rgba)"
+            .value=${device.color_off || 'rgba(0, 0, 0, 0.2)'}
+            @input=${(e: any) => this._handleDeviceChange({
+              target: { configValue: 'color_off' },
+              detail: { value: e.target.value }
+            }, index)}
+          ></ha-textfield>
 
-              <ha-textfield
-                label="On Color (hex, rgb, rgba)"
-                .value=${device.color_on || (isLightEntity ? 'light-color' : '#FDD835')}
-                @input=${(e: any) => this._handleDeviceChange({
-                  target: { configValue: 'color_on' },
-                  detail: { value: e.target.value }
-                }, index)}
-                helper="${isLightEntity ? 'Use "light-color" to match light RGB' : ''}"
-              ></ha-textfield>
-
-              <ha-textfield
-                label="Off Color (hex, rgb, rgba)"
-                .value=${device.color_off || 'rgba(0, 0, 0, 0.2)'}
-                @input=${(e: any) => this._handleDeviceChange({
-                  target: { configValue: 'color_off' },
-                  detail: { value: e.target.value }
-                }, index)}
-              ></ha-textfield>
-
-              <ha-textfield
-                label="Unavailable Color (hex, rgb, rgba)"
-                .value=${device.color_unavailable || 'rgba(128, 128, 128, 0.5)'}
-                @input=${(e: any) => this._handleDeviceChange({
-                  target: { configValue: 'color_unavailable' },
-                  detail: { value: e.target.value }
-                }, index)}
-              ></ha-textfield>
-            </div>
-
-            <ha-textfield
-              label="Scale"
-              type="number"
-              .value=${device.scale || 1}
-              .configValue=${'scale'}
-              @input=${(e: any) => this._handleDeviceChange(e, index)}
-              min="0.1"
-              max="255"
-              step="0.1"
-            ></ha-textfield>
-
-            <ha-select
-              naturalMenuWidth
-              fixedMenuPosition
-              label="Control Type"
-              .value=${device.type || 'continuous'}
-              .configValue=${'type'}
-              @selected=${(e: any) => this._handleDeviceChange(e, index)}
-              @closed=${(e: Event) => e.stopPropagation()}
-            >
-              <ha-list-item value="continuous">Continuous (Slider)</ha-list-item>
-              <ha-list-item value="discrete">Discrete (Modes)</ha-list-item>
-            </ha-select>
-
-            ${device.type === 'discrete' ? this._renderModes(device, index) : ''}
-          </div>
-        </ha-expansion-panel>
-      </ha-card>
+          <ha-textfield
+            label="Unavailable Color (hex, rgb, rgba)"
+            .value=${device.color_unavailable || 'rgba(128, 128, 128, 0.5)'}
+            @input=${(e: any) => this._handleDeviceChange({
+              target: { configValue: 'color_unavailable' },
+              detail: { value: e.target.value }
+            }, index)}
+          ></ha-textfield>
+        </div>
+      </div>
     `;
   }
 
-  private _renderModes(device: DeviceConfig, deviceIndex: number): TemplateResult {
+  private _renderDeviceModes(device: DeviceConfig, deviceIndex: number): TemplateResult {
     const modes = device.modes || [];
-
+    
     return html`
       <div class="modes-section">
         <div class="modes-header">
-          <label>Modes</label>
+          <label>Discrete Modes</label>
           <ha-icon-button
             @click=${() => this._addMode(deviceIndex)}
             .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
           ></ha-icon-button>
         </div>
-        
-        ${modes.map((mode, modeIndex) => html`
-          <div class="mode-item">
-            <div class="mode-row">
+        <div class="modes-list">
+          ${modes.map((mode, modeIndex) => html`
+            <div class="mode-item">
               <ha-textfield
                 label="Label"
                 .value=${mode.label}
                 @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
               ></ha-textfield>
-              
               <ha-textfield
                 label="Value"
                 type="number"
                 .value=${mode.value}
-                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'value', parseFloat(e.target.value))}
+                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'value', parseInt(e.target.value))}
               ></ha-textfield>
-              
               <ha-textfield
                 label="Percentage"
                 type="number"
                 .value=${mode.percentage}
-                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'percentage', parseFloat(e.target.value))}
-                min="0"
-                max="100"
+                @input=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'percentage', parseInt(e.target.value))}
               ></ha-textfield>
-              
               <ha-icon-button
                 @click=${() => this._removeMode(deviceIndex, modeIndex)}
                 .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
               ></ha-icon-button>
             </div>
-            
-            <div class="mode-icon-row">
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${{ icon: {} }}
-                .value=${mode.icon}
-                .label=${'Mode Icon'}
-                @value-changed=${(e: any) => this._updateMode(deviceIndex, modeIndex, 'icon', e.detail.value)}
-              ></ha-selector>
-            </div>
-          </div>
-        `)}
+          `)}
+        </div>
       </div>
     `;
   }
 
-  // Helper methods
-  private _getFriendlyName(entityId: string | undefined): string {
-    if (!entityId || !this.hass) return '';
-    const state = this.hass.states[entityId];
-    return state?.attributes?.friendly_name || entityId.split('.')[1].replace(/_/g, ' ');
-  }
-
   private _handleBackgroundTypeChange(type: string): void {
+    if (!this._config) return;
+    
+    const currentBackground = this._config.background;
+    
     if (type === 'static') {
-      // Switch to static color - empty string means no background
+      // Switching to static color
+      let newColor: string;
+      
+      // Preserve existing static color if we have one
+      if (typeof currentBackground === 'string') {
+        // Already a static color, keep it
+        return;
+      } else if (typeof currentBackground === 'object' && currentBackground.ranges && currentBackground.ranges.length > 0) {
+        // Switching from entity-based, maybe use first color as starting point
+        newColor = currentBackground.ranges[0]?.color || 'var(--card-background-color)';
+      } else {
+        // No existing color, use default
+        newColor = 'var(--card-background-color)';
+      }
+      
       this._updateConfig({ 
-        background: '' 
+        background: newColor 
       });
+      
     } else if (type === 'entity') {
-      // Switch to entity-based color configuration
-      // Provide empty entity and empty ranges array for user to configure
+      // Switching to entity-based color
+      
+      // If already entity-based, keep current config
+      if (typeof currentBackground === 'object' && currentBackground.entity !== undefined) {
+        return;
+      }
+      
+      // Create new entity config
+      const newEntityConfig: any = {
+        entity: '',
+        ranges: []
+      };
+      
+      // If switching from a static color, create a simple on/off range using that color
+      if (typeof currentBackground === 'string' && currentBackground) {
+        newEntityConfig.ranges = [
+          {
+            state: 'on',
+            color: currentBackground
+          },
+          {
+            state: 'off',
+            color: 'var(--state-inactive-color)'
+          }
+        ];
+      }
+      
       this._updateConfig({ 
-        background: { 
-          entity: '',
-          ranges: []
-        }
+        background: newEntityConfig 
       });
     }
   }
@@ -737,6 +733,151 @@ export class RoomCardEditor extends LitElement {
     } else {
       this._updateConfig({ icon_background: { entity: '', ranges: [] } });
     }
+  }
+
+  private _addColorRange(configKey: string): void {
+    const config = this._config![configKey] as any;
+    const newRange = { min: 0, max: 100, color: '#FFFFFF' };
+    const ranges = [...(config.ranges || []), newRange];
+    
+    this._updateConfig({
+      [configKey]: { ...config, ranges }
+    });
+  }
+
+  private _updateColorRange(configKey: string, index: number, field: string, value: any): void {
+    const config = this._config![configKey] as any;
+    const ranges = [...(config.ranges || [])];
+    ranges[index] = { ...ranges[index], [field]: value };
+    
+    this._updateConfig({
+      [configKey]: { ...config, ranges }
+    });
+  }
+
+  private _removeColorRange(configKey: string, index: number): void {
+    const config = this._config![configKey] as any;
+    const ranges = [...(config.ranges || [])];
+    ranges.splice(index, 1);
+    
+    this._updateConfig({
+      [configKey]: { ...config, ranges }
+    });
+  }
+
+  private _toggleRangeType(configKey: string, index: number): void {
+    const config = this._config![configKey] as any;
+    const ranges = [...(config.ranges || [])];
+    const range = ranges[index];
+    
+    if (range.state !== undefined) {
+      // Switch to numeric
+      delete range.state;
+      range.min = 0;
+      range.max = 100;
+    } else {
+      // Switch to state
+      delete range.min;
+      delete range.max;
+      range.state = 'on';
+    }
+    
+    ranges[index] = range;
+    this._updateConfig({
+      [configKey]: { ...config, ranges }
+    });
+  }
+
+  private _addDevice(): void {
+    const devices = [...(this._config!.devices || [])];
+    devices.push({
+      entity: '',
+      icon: 'mdi:lightbulb',
+      attribute: 'brightness',
+      scale: 2.55,
+      type: 'continuous',
+      show_chip: true,
+      show_slider: true,
+      color_on: '#FDD835',
+      color_off: 'rgba(0, 0, 0, 0.2)',
+      color_unavailable: 'rgba(128, 128, 128, 0.5)',
+      icon_color: '#FFFFFF'
+    });
+    this._updateConfig({ devices });
+  }
+
+  private _removeDevice(index: number): void {
+    const devices = [...(this._config!.devices || [])];
+    devices.splice(index, 1);
+    this._updateConfig({ devices });
+  }
+
+  private _addMode(deviceIndex: number): void {
+    const devices = [...(this._config!.devices || [])];
+    const modes = [...(devices[deviceIndex].modes || [])];
+    modes.push({
+      label: `Mode ${modes.length + 1}`,
+      value: modes.length,
+      percentage: modes.length * 33
+    });
+    devices[deviceIndex] = { ...devices[deviceIndex], modes };
+    this._updateConfig({ devices });
+  }
+
+  private _updateMode(deviceIndex: number, modeIndex: number, field: string, value: any): void {
+    const devices = [...(this._config!.devices || [])];
+    const modes = [...(devices[deviceIndex].modes || [])];
+    modes[modeIndex] = { ...modes[modeIndex], [field]: value };
+    devices[deviceIndex] = { ...devices[deviceIndex], modes };
+    this._updateConfig({ devices });
+  }
+
+  private _removeMode(deviceIndex: number, modeIndex: number): void {
+    const devices = [...(this._config!.devices || [])];
+    const modes = [...(devices[deviceIndex].modes || [])];
+    modes.splice(modeIndex, 1);
+    devices[deviceIndex] = { ...devices[deviceIndex], modes };
+    this._updateConfig({ devices });
+  }
+
+  private _formatAttributeName(attr: string): string {
+    return attr.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  }
+
+  private _getEntityAttributes(entity: string): string[] {
+    if (!entity || !this.hass) return ['state'];
+    
+    const domain = entity.split('.')[0];
+    const domainAttributes: Record<string, string[]> = {
+      light: ['brightness', 'rgb_color', 'color_temp', 'effect', 'white_value', 'brightness_pct'],
+      media_player: ['volume_level', 'media_position', 'media_duration', 'source', 'sound_mode'],
+      fan: ['percentage', 'preset_mode', 'speed', 'oscillating', 'direction'],
+      climate: ['temperature', 'target_temp_high', 'target_temp_low', 'humidity', 'fan_mode', 'swing_mode'],
+      cover: ['position', 'tilt_position', 'current_position'],
+      vacuum: ['battery_level', 'fan_speed', 'status'],
+      humidifier: ['humidity', 'mode', 'target_humidity'],
+      water_heater: ['temperature', 'target_temp_high', 'target_temp_low', 'operation_mode'],
+      sensor: ['state'],
+      switch: ['state'],
+      camera: ['state'],
+      remote: ['state'],
+      button: ['state'],
+      valve: ['state', 'current_position']
+    };
+    
+    const defaultAttrs = domainAttributes[domain] || ['state'];
+    const stateObj = this.hass.states[entity];
+    
+    if (stateObj?.attributes) {
+      const customAttrs = Object.keys(stateObj.attributes).filter(
+        attr => !['friendly_name', 'icon', 'entity_id', 'supported_features', 'device_class'].includes(attr)
+      );
+      return [...new Set([...defaultAttrs, ...customAttrs])];
+    }
+    
+    return defaultAttrs;
   }
 
   private _valueChanged(ev: any): void {
@@ -782,7 +923,8 @@ export class RoomCardEditor extends LitElement {
           entity: value,
           icon: defaults.icon,
           attribute: defaults.attribute,
-          scale: domain === 'light' ? 255 : 1
+          scale: domain === 'light' ? 2.55 : 1,
+          color_on: defaults.color
         };
       } else {
         devices[index] = { ...devices[index], [configValue]: value };
@@ -792,97 +934,6 @@ export class RoomCardEditor extends LitElement {
     }
     
     this._updateConfig({ devices });
-  }
-
-  private _addDevice(): void {
-    const devices = [...(this._config!.devices || [])];
-    const nextIndex = devices.length;
-    
-    // Cycle through different default types
-    const deviceTypes = Object.keys(this.deviceDefaults);
-    const typeIndex = nextIndex % deviceTypes.length;
-    const deviceType = deviceTypes[typeIndex];
-    const defaults = this.deviceDefaults[deviceType];
-    
-    devices.push({
-      entity: '',
-      attribute: defaults.attribute,
-      icon: defaults.icon,
-      scale: deviceType === 'light' ? 255 : 1,
-      type: 'continuous',
-      show_chip: true,
-      show_slider: true
-    });
-    this._updateConfig({ devices });
-  }
-
-  private _removeDevice(index: number): void {
-    const devices = [...(this._config!.devices || [])];
-    devices.splice(index, 1);
-    this._updateConfig({ devices });
-  }
-
-  private _addMode(deviceIndex: number): void {
-    const devices = [...(this._config!.devices || [])];
-    const modes = [...(devices[deviceIndex].modes || [])];
-    modes.push({
-      value: modes.length,
-      label: `Mode ${modes.length + 1}`,
-      percentage: (100 / (modes.length + 1)) * modes.length,
-      icon: 'mdi:power'
-    });
-    devices[deviceIndex] = { ...devices[deviceIndex], modes };
-    this._updateConfig({ devices });
-  }
-
-  private _updateMode(deviceIndex: number, modeIndex: number, field: string, value: any): void {
-    const devices = [...(this._config!.devices || [])];
-    const modes = [...(devices[deviceIndex].modes || [])];
-    modes[modeIndex] = { ...modes[modeIndex], [field]: value };
-    devices[deviceIndex] = { ...devices[deviceIndex], modes };
-    this._updateConfig({ devices });
-  }
-
-  private _removeMode(deviceIndex: number, modeIndex: number): void {
-    const devices = [...(this._config!.devices || [])];
-    const modes = [...(devices[deviceIndex].modes || [])];
-    modes.splice(modeIndex, 1);
-    devices[deviceIndex] = { ...devices[deviceIndex], modes };
-    this._updateConfig({ devices });
-  }
-
-  private _getEntityAttributes(entity: string): string[] {
-    if (!this.hass || !entity) return ['brightness', 'volume_level', 'percentage', 'state'];
-    
-    const domain = entity.split('.')[0];
-    const domainAttributes: Record<string, string[]> = {
-      light: ['brightness', 'rgb_color', 'color_temp', 'effect', 'white_value', 'brightness_pct'],
-      media_player: ['volume_level', 'media_position', 'media_duration', 'source', 'sound_mode'],
-      fan: ['percentage', 'preset_mode', 'speed', 'oscillating', 'direction'],
-      climate: ['temperature', 'target_temp_high', 'target_temp_low', 'humidity', 'fan_mode', 'swing_mode'],
-      cover: ['position', 'tilt_position', 'current_position'],
-      vacuum: ['battery_level', 'fan_speed', 'status'],
-      humidifier: ['humidity', 'mode', 'target_humidity'],
-      water_heater: ['temperature', 'target_temp_high', 'target_temp_low', 'operation_mode'],
-      sensor: ['state'],
-      switch: ['state'],
-      camera: ['state'],
-      remote: ['state'],
-      button: ['state'],
-      valve: ['state', 'current_position']
-    };
-    
-    const defaultAttrs = domainAttributes[domain] || ['state'];
-    const stateObj = this.hass.states[entity];
-    
-    if (stateObj?.attributes) {
-      const customAttrs = Object.keys(stateObj.attributes).filter(
-        attr => !['friendly_name', 'icon', 'entity_id', 'supported_features', 'device_class'].includes(attr)
-      );
-      return [...new Set([...defaultAttrs, ...customAttrs])];
-    }
-    
-    return defaultAttrs;
   }
 
   static get styles(): CSSResult {
@@ -938,17 +989,64 @@ export class RoomCardEditor extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        margin-bottom: 8px;
       }
 
-      .devices-header h3 {
-        margin: 0;
+      .devices-header label,
+      .modes-header label,
+      .ranges-header label {
+        font-weight: 500;
+        font-size: 1.1em;
       }
 
       .device-config {
+        padding: 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
         display: flex;
         flex-direction: column;
         gap: 12px;
-        padding: 16px;
+      }
+
+      .device-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+
+      .modes-section,
+      .color-ranges {
+        padding: 12px;
+        background: var(--secondary-background-color);
+        border-radius: 8px;
+      }
+
+      .modes-list,
+      .ranges-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .mode-item,
+      .range-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .range-inputs {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+      }
+
+      .mode-item ha-textfield,
+      .range-item ha-textfield {
+        flex: 1;
       }
 
       .color-config-section {
@@ -956,116 +1054,45 @@ export class RoomCardEditor extends LitElement {
         flex-direction: column;
         gap: 12px;
         padding: 12px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
+        background: var(--secondary-background-color);
+        border-radius: 8px;
       }
 
-      .color-config-section > label {
+      .color-config-section label {
         font-weight: 500;
         margin-bottom: 4px;
       }
 
-      .color-ranges,
       .device-colors {
         display: flex;
         flex-direction: column;
         gap: 8px;
-        margin-top: 8px;
+        padding: 12px;
+        background: var(--secondary-background-color);
+        border-radius: 8px;
       }
 
-      .color-ranges label,
       .device-colors label {
-        font-size: 0.9em;
         font-weight: 500;
-        color: var(--secondary-text-color);
-      }
-
-      .ranges-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .range-item {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 8px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-      }
-
-      .range-inputs {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-
-      .range-inputs ha-textfield {
-        flex: 1;
-      }
-
-      .display-options {
-        display: flex;
-        gap: 16px;
-      }
-
-      .modes-section {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .modes-section label {
-        font-size: 0.9em;
-        font-weight: 500;
-        color: var(--secondary-text-color);
-      }
-
-      .mode-item {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 8px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-      }
-
-      .mode-row {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-
-      .mode-row ha-textfield {
-        flex: 1;
-      }
-
-      .mode-icon-row {
-        display: flex;
-        width: 100%;
-      }
-
-      .mode-icon-row ha-selector {
-        flex: 1;
-      }
-
-      ha-card {
-        margin-bottom: 8px;
+        margin-bottom: 4px;
       }
 
       ha-expansion-panel {
-        --ha-card-border-radius: 4px;
-        --expansion-panel-content-padding: 0;
+        margin-top: 8px;
       }
 
-      ha-selector {
-        display: block;
+      ha-icon-button {
+        color: var(--primary-color);
+      }
+
+      ha-icon-button[slot="trigger"] {
+        color: var(--secondary-text-color);
       }
     `;
   }
 }
 
+// Declare global types
 declare global {
   interface HTMLElementTagNameMap {
     'room-card-editor': RoomCardEditor;

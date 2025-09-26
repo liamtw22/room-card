@@ -55,6 +55,7 @@ export interface ColorRange {
   min: number;
   max: number;
   color: string;
+  state?: string; // For state-based matching
 }
 
 export interface DeviceConfig {
@@ -126,7 +127,11 @@ export class RoomCard extends LitElement implements LovelaceCard {
       throw new Error("You need to define an area");
     }
     
-    this._config = config;
+    // Apply default background only if not defined
+    this._config = {
+      ...config,
+      background: config.background !== undefined ? config.background : 'var(--card-background-color)'
+    };
     this._initializeDevices();
   }
 
@@ -216,53 +221,92 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private getBackgroundColor(): string {
-      if (!this.hass || !this._config) return "";
+    if (!this.hass || !this._config) return "var(--card-background-color)";
 
-      const background = this._config.background;
-      
-      // No background configured - return empty string (no default)
-      if (!background) return "";
-      
-      // Static color configuration
-      if (typeof background === 'string') {
-        return background;
-      } 
-      
-      // Entity-based color configuration
-      else if (background.entity) {
-        const entity = this.hass.states[background.entity];
-        
-        // Entity doesn't exist
-        if (!entity) {
-          return "";
-        }
-        
-        // Check if ranges are defined
-        if (background.ranges) {
-          const value = parseFloat(entity.state);
-          
-          // For numeric states, check ranges
-          if (!isNaN(value)) {
-            for (const range of background.ranges) {
-              if (value >= range.min && value <= range.max) {
-                return range.color;
-              }
-            }
-          }
-          
-          // For non-numeric states, could also check exact state matches
-          // You could extend this to support state-based colors like:
-          // { state: "on", color: "#4CAF50" }
-          // { state: "off", color: "#757575" }
-        }
-        
-        // No matching range found
-        return "";
-      }
-      
-      // No valid configuration found
+    const background = this._config.background;
+    
+    // No background configured - use default theme card background
+    if (background === undefined || background === null) {
+      return "var(--card-background-color)";
+    }
+    
+    // Empty string explicitly set - user wants transparent
+    if (background === '') {
       return "";
     }
+    
+    // Static color configuration (including CSS variables)
+    if (typeof background === 'string') {
+      return background;
+    } 
+    
+    // Entity-based color configuration
+    else if (background.entity) {
+      const entity = this.hass.states[background.entity];
+      
+      // Entity doesn't exist - return default
+      if (!entity) {
+        return "var(--card-background-color)";
+      }
+      
+      // Check if ranges are defined
+      if (background.ranges && background.ranges.length > 0) {
+        const value = parseFloat(entity.state);
+        
+        // For numeric states, check ranges
+        if (!isNaN(value)) {
+          for (const range of background.ranges) {
+            if (value >= range.min && value <= range.max) {
+              return range.color;
+            }
+          }
+        }
+        
+        // Also support state-based matching (non-numeric)
+        for (const range of background.ranges) {
+          if (range.state && entity.state === range.state) {
+            return range.color;
+          }
+        }
+      }
+      
+      // No ranges defined or no match - use Home Assistant state colors
+      const domain = background.entity.split('.')[0];
+      
+      // Use proper Home Assistant theme variables based on state
+      if (entity.state === 'unavailable' || entity.state === 'unknown') {
+        return 'var(--state-unavailable-color)';
+      }
+      
+      // Active states (on, playing, open, etc.)
+      if (['on', 'playing', 'open', 'unlocked', 'home', 'active'].includes(entity.state)) {
+        // Use domain-specific active colors if available
+        switch (domain) {
+          case 'light':
+            return 'var(--state-light-active-color, var(--state-active-color))';
+          case 'switch':
+            return 'var(--state-switch-active-color, var(--state-active-color))';
+          case 'binary_sensor':
+            return 'var(--state-binary-sensor-active-color, var(--state-active-color))';
+          case 'climate':
+            return 'var(--state-climate-active-color, var(--state-active-color))';
+          default:
+            return 'var(--state-active-color)';
+        }
+      }
+      
+      // Inactive states (off, paused, closed, etc.)
+      if (['off', 'paused', 'closed', 'locked', 'away', 'inactive', 'idle'].includes(entity.state)) {
+        return 'var(--state-inactive-color)';
+      }
+      
+      // Default to card background for other states
+      return 'var(--card-background-color)';
+    }
+    
+    // No valid configuration - use default
+    return "var(--card-background-color)";
+  }
 
   private getIconColor(): string {
     if (!this.hass || !this._config) return "#FFFFFF";
@@ -952,7 +996,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
       .chips-column {
         display: flex;
         flex-direction: column;
-        gap: px;
+        gap: 4px;
       }
 
       .chip {
@@ -995,6 +1039,8 @@ export class RoomCard extends LitElement implements LovelaceCard {
       type: 'custom:room-card',
       area: '',
       name: '',
+      background: 'var(--card-background-color)', // Default background
+      icon: 'mdi:home',
       temperature_sensor: '',
       humidity_sensor: '',
       show_temperature: true,
