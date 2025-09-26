@@ -130,7 +130,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
     // Apply default background only if not defined
     this._config = {
       ...config,
-      background: config.background !== undefined ? config.background : 'var(--card-background-color)'
+      background: config.background !== undefined ? config.background : 'var(--ha-card-background)'
     };
     this._initializeDevices();
   }
@@ -221,13 +221,13 @@ export class RoomCard extends LitElement implements LovelaceCard {
   }
 
   private getBackgroundColor(): string {
-    if (!this.hass || !this._config) return "var(--card-background-color)";
+    if (!this.hass || !this._config) return "var(--ha-card-background)";
 
     const background = this._config.background;
     
     // No background configured - use default theme card background
     if (background === undefined || background === null) {
-      return "var(--card-background-color)";
+      return "var(--ha-card-background)";
     }
     
     // Empty string explicitly set - user wants transparent
@@ -246,7 +246,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
       
       // Entity doesn't exist - return default
       if (!entity) {
-        return "var(--card-background-color)";
+        return "var(--ha-card-background)";
       }
       
       // Check if ranges are defined
@@ -301,11 +301,11 @@ export class RoomCard extends LitElement implements LovelaceCard {
       }
       
       // Default to card background for other states
-      return 'var(--card-background-color)';
+      return 'var(--ha-card-background)';
     }
     
     // No valid configuration - use default
-    return "var(--card-background-color)";
+    return "var(--ha-card-background)";
   }
 
   private getIconColor(): string {
@@ -1039,7 +1039,7 @@ export class RoomCard extends LitElement implements LovelaceCard {
       type: 'custom:room-card',
       area: '',
       name: '',
-      background: 'var(--card-background-color)', // Default background
+      background: 'var(--ha-card-background)', // Default background
       icon: 'mdi:home',
       temperature_sensor: '',
       humidity_sensor: '',

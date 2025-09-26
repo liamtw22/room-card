@@ -44,7 +44,7 @@ export class RoomCardEditor extends LitElement {
     if (this._config.background === undefined) {
       this._config = {
         ...this._config,
-        background: 'var(--card-background-color)'
+        background: 'var(--ha-card-background)'
       };
     }
     
@@ -173,12 +173,12 @@ export class RoomCardEditor extends LitElement {
             ${backgroundType === 'static' ? html`
               <ha-textfield
                 label="Background Color"
-                .value=${typeof this._config!.background === 'string' ? this._config!.background : 'var(--card-background-color)'}
+                .value=${typeof this._config!.background === 'string' ? this._config!.background : 'var(--ha-card-background)'}
                 @input=${(e: any) => {
                   this._updateConfig({ background: e.target.value });
                 }}
-                helper="Theme variables: var(--card-background-color), var(--primary-background-color) | Colors: #FFFFFF, rgb(), rgba() | Empty for transparent"
-                placeholder="var(--card-background-color)"
+                helper="Theme variables: var(--ha-card-background), var(--primary-background-color) | Colors: #FFFFFF, rgb(), rgba() | Empty for transparent"
+                placeholder="var(--ha-card-background)"
               ></ha-textfield>
             ` : html`
               <ha-selector
@@ -675,10 +675,10 @@ export class RoomCardEditor extends LitElement {
         return;
       } else if (typeof currentBackground === 'object' && currentBackground.ranges && currentBackground.ranges.length > 0) {
         // Switching from entity-based, maybe use first color as starting point
-        newColor = currentBackground.ranges[0]?.color || 'var(--card-background-color)';
+        newColor = currentBackground.ranges[0]?.color || 'var(--ha-card-background)';
       } else {
         // No existing color, use default
-        newColor = 'var(--card-background-color)';
+        newColor = 'var(--ha-card-background)';
       }
       
       this._updateConfig({ 
