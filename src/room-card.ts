@@ -216,8 +216,8 @@ export class RoomCard extends LitElement {
 
   private _renderContinuousControl(device: DeviceConfig, stateObj: HassEntity): TemplateResult {
     let value = 0;
-    let max = device.max_value || 100;
-    let min = device.min_value || 0;
+    const max = device.max_value || 100;
+    const min = device.min_value || 0;
 
     if (device.type === 'light' && stateObj.attributes.brightness !== undefined) {
       value = stateObj.attributes.brightness;
