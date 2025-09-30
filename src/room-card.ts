@@ -1,13 +1,6 @@
 import { LitElement, html, css, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, LovelaceCardConfig } from 'custom-card-helpers';
-import { handleAction } from './handle-action';
-import { hasAction } from './has-action';
-import { fireEvent } from './fire-event';
-import { computeStateDisplay } from './compute-state-display';
-import { stateIcon } from './state-icon';
-import { forwardHaptic } from './haptic';
-import { toggleEntity } from './toggle-entity';
+import { HomeAssistant, LovelaceCardConfig, handleAction, hasAction, fireEvent, computeStateDisplay, stateIcon, forwardHaptic, toggleEntity } from 'custom-card-helpers';
 import { guard } from 'lit/directives/guard.js';
 import { memoize } from './memoize';
 import './ha-card';
