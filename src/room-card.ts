@@ -2,7 +2,6 @@ import { LitElement, html, TemplateResult, PropertyValues, CSSResultGroup } from
 import { customElement, property, state } from 'lit/decorators.js';
 import {
   HomeAssistant,
-  hasConfigOrEntityChanged,
   LovelaceCardEditor,
   handleClick,
   ActionConfig,
@@ -19,7 +18,6 @@ console.info(
   'color: white; font-weight: bold; background: dimgray',
 );
 
-// Register card in the card picker
 (window as any).customCards = (window as any).customCards || [];
 (window as any).customCards.push({
   type: 'room-card',
@@ -89,31 +87,26 @@ export class RoomCard extends LitElement {
       return false;
     }
     
-    // Always update if config changed
     if (changedProps.has('_config')) {
       return true;
     }
     
-    // Check if any monitored entities changed
     if (changedProps.has('hass')) {
       const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
       if (!oldHass) {
         return true;
       }
       
-      // Check temperature sensor
       if (this._config.temperature_sensor && 
           oldHass.states[this._config.temperature_sensor] !== this.hass.states[this._config.temperature_sensor]) {
         return true;
       }
       
-      // Check humidity sensor
       if (this._config.humidity_sensor && 
           oldHass.states[this._config.humidity_sensor] !== this.hass.states[this._config.humidity_sensor]) {
         return true;
       }
       
-      // Check device entities
       if (this._config.devices) {
         for (const device of this._config.devices) {
           if (device.entity && oldHass.states[device.entity] !== this.hass.states[device.entity]) {
@@ -122,7 +115,6 @@ export class RoomCard extends LitElement {
         }
       }
       
-      // Check background entity if configured
       if (this._config.background_entity && 
           oldHass.states[this._config.background_entity] !== this.hass.states[this._config.background_entity]) {
         return true;
@@ -141,13 +133,13 @@ export class RoomCard extends LitElement {
       return this._showError(this._error);
     }
 
-    const backgroundColor = this._getBackgroundStyle();
+    const backgroundStyle = this._getBackgroundStyle();
 
     return html`
       <ha-card>
         ${this._config.name ? html`<div class="card-header">${this._config.name}</div>` : ''}
         <div class="card-content">
-          <div class="temperature-humidity-container" style="${backgroundColor}">
+          <div class="temperature-humidity-container" style="${backgroundStyle}">
             ${this._renderTemperature()} ${this._renderHumidity()}
           </div>
           ${this._renderDevices()}
@@ -169,7 +161,6 @@ export class RoomCard extends LitElement {
     let temperature = parseFloat(stateObj.state);
     const unit = this._config.temperature_unit || 'F';
     
-    // Convert if needed
     if (stateObj.attributes.unit_of_measurement === '°C' && unit === 'F') {
       temperature = (temperature * 9) / 5 + 32;
     } else if (stateObj.attributes.unit_of_measurement === '°F' && unit === 'C') {
@@ -370,36 +361,28 @@ export class RoomCard extends LitElement {
     }
   }
 
-  private _getBackgroundColor(): string {
-    if (!this._config.temperature_sensor || !this._config.show_temperature) {
-      return this._config.background_colors?.comfortable || DEFAULT_BACKGROUND_COLORS.comfortable;
-    }
-
-    const stateObj = this.hass.states[this._config.temperature_sensor];
-    if (!stateObj) {
-      return this._config.background_colors?.comfortable || DEFAULT_BACKGROUND_COLORS.comfortable;
-    }
-
-    let temperature = parseFloat(stateObj.state);
+  private _getBackgroundStyle(): string {
+    const bgType = this._config.background_type || 'solid';
     
-    // Convert to Celsius for comparison
-    if (stateObj.attributes.unit_of_measurement === '°F') {
-      temperature = ((temperature - 32) * 5) / 9;
+    if (bgType === 'entity' && this._config.background_entity) {
+      const stateObj = this.hass.states[this._config.background_entity];
+      if (stateObj) {
+        const attribute = this._config.background_entity_attribute;
+        const value = attribute ? stateObj.attributes[attribute] : stateObj.state;
+        
+        if (value && typeof value === 'string' && (
+          value.startsWith('#') || 
+          value.startsWith('rgb') || 
+          value.startsWith('hsl') ||
+          CSS.supports('color', value)
+        )) {
+          return `background-color: ${value}`;
+        }
+      }
     }
-
-    const colors = { ...DEFAULT_BACKGROUND_COLORS, ...this._config.background_colors };
-
-    if (temperature < TEMPERATURE_RANGES.cold.max) {
-      return colors.cold;
-    } else if (temperature < TEMPERATURE_RANGES.cool.max) {
-      return colors.cool;
-    } else if (temperature < TEMPERATURE_RANGES.comfortable.max) {
-      return colors.comfortable;
-    } else if (temperature < TEMPERATURE_RANGES.warm.max) {
-      return colors.warm;
-    } else {
-      return colors.hot;
-    }
+    
+    const color = this._config.background_color || DEFAULT_BACKGROUND_COLOR;
+    return `background-color: ${color}`;
   }
 
   private _getDeviceIcon(type: string, stateObj: HassEntity): string {
