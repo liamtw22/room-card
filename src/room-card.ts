@@ -11,6 +11,7 @@ import { HassEntity } from 'home-assistant-js-websocket';
 import type { RoomCardConfig, DeviceConfig } from './types';
 import { CARD_VERSION, DEFAULT_BACKGROUND_COLOR } from './const';
 import { styles } from './styles';
+import '.editor';
 
 console.info(
   `%c  room-card \n%c  Version ${CARD_VERSION}    `,
