@@ -1,33 +1,51 @@
 {
   "name": "room-card",
   "version": "1.0.0",
-  "description": "Home Assistant room card with temperature, humidity and device controls",
+  "description": "A beautiful room card for Home Assistant with temperature, humidity, and device controls",
   "main": "dist/room-card.js",
-  "module": "dist/room-card.js",
-  "type": "module",
   "scripts": {
-    "build": "rollup -c",
-    "dev": "rollup -c -w",
-    "clean": "rm -rf dist",
+    "start": "rollup -c rollup.config.dev.js --watch",
+    "build": "npm run clean && rollup -c",
+    "clean": "rimraf dist",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
     "prebuild": "npm run clean"
   },
-  "keywords": ["home-assistant", "lovelace", "custom-card", "room-card"],
-  "author": "Your Name",
+  "keywords": [
+    "home-assistant",
+    "homeassistant",
+    "hacs",
+    "lovelace",
+    "custom-card",
+    "room-card"
+  ],
+  "author": "Liam Wilson",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/room-card"
+    "url": "https://github.com/liamtw22/room-card.git"
   },
-  "devDependencies": {
-    "@rollup/plugin-json": "^6.0.1",
-    "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-typescript": "^11.1.5",
-    "@types/node": "^20.8.0",
-    "rollup": "^4.6.1",
-    "typescript": "^5.2.2"
+  "bugs": {
+    "url": "https://github.com/liamtw22/room-card/issues"
   },
+  "homepage": "https://github.com/liamtw22/room-card#readme",
   "dependencies": {
     "custom-card-helpers": "^1.9.0",
-    "lit": "^3.1.0"
+    "home-assistant-js-websocket": "^8.2.0",
+    "lit": "^2.8.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-json": "^6.0.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.5",
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "eslint": "^8.55.0",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.6.1",
+    "rollup-plugin-serve": "^2.0.2",
+    "typescript": "^5.3.3"
   }
 }
