@@ -14,7 +14,7 @@ import { CARD_VERSION, DEFAULT_BACKGROUND_COLOR } from './const';
 import { styles } from './styles';
 
 console.info(
-  `%c  ROOM-CARD-2 \n%c  Version ${CARD_VERSION}    `,
+  `%c  room-card \n%c  Version ${CARD_VERSION}    `,
   'color: orange; font-weight: bold; background: black',
   'color: white; font-weight: bold; background: dimgray',
 );
@@ -22,14 +22,14 @@ console.info(
 // Register card in the card picker
 (window as any).customCards = (window as any).customCards || [];
 (window as any).customCards.push({
-  type: 'room-card-2',
-  name: 'Room Card 2',
+  type: 'room-card',
+  name: 'Room Card',
   description: 'A beautiful room card with temperature, humidity, and device controls',
   preview: false,
   documentationURL: 'https://github.com/liamtw22/room-card',
 });
 
-@customElement('room-card-2')
+@customElement('room-card')
 export class RoomCard extends LitElement {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     await import('./editor');
