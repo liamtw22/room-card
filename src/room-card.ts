@@ -3,8 +3,6 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCardConfig, handleAction, hasAction, fireEvent, computeStateDisplay, stateIcon, forwardHaptic, toggleEntity } from 'custom-card-helpers';
 import { guard } from 'lit/directives/guard.js';
 import memoizeOne from "memoize-one";
-import './ha-state-icon';
-import './ha-icon';
 
 interface RoomCardConfig extends LovelaceCardConfig {
   type: string;
