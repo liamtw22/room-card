@@ -681,7 +681,7 @@ export class RoomCard extends LitElement {
     // Validation check
     const validation = this._hasValidConfig();
     if (!validation.valid) {
-      return this._showError(error);
+      return this._showError(err);
     }
 
     if (this._isLoading) {
@@ -697,7 +697,7 @@ export class RoomCard extends LitElement {
     }
 
     if (!this._config || !this.hass) {
-      return this._showError(error);
+      return this._showError(err);
     }
 
     const backgroundColor = this.getBackgroundColor();
