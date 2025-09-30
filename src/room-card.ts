@@ -1,8 +1,7 @@
 import { LitElement, html, css, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, LovelaceCardConfig, handleAction, hasAction, fireEvent, computeStateDisplay, stateIcon, forwardHaptic, toggleEntity } from 'custom-card-helpers';
+import { HomeAssistant, LovelaceCardConfig, handleAction, hasAction, fireEvent, computeStateDisplay, stateIcon, forwardHaptic, toggleEntity, memoize } from 'custom-card-helpers';
 import { guard } from 'lit/directives/guard.js';
-import { memoize } from './memoize';
 import './ha-card';
 import './hui-warning';
 import './ha-state-icon';
