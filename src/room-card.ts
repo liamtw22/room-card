@@ -3,7 +3,6 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCardConfig, handleAction, hasAction, fireEvent, computeStateDisplay, stateIcon, forwardHaptic, toggleEntity } from 'custom-card-helpers';
 import { guard } from 'lit/directives/guard.js';
 import memoizeOne from "memoize-one";
-import './hui-warning';
 import './ha-state-icon';
 import './ha-icon';
 
@@ -684,11 +683,7 @@ export class RoomCard extends LitElement {
     // Validation check
     const validation = this._hasValidConfig();
     if (!validation.valid) {
-      return html`
-        <hui-warning>
-          ${validation.error}
-        </hui-warning>
-      `;
+      return this._showError(error);
     }
 
     if (this._isLoading) {
@@ -704,7 +699,7 @@ export class RoomCard extends LitElement {
     }
 
     if (!this._config || !this.hass) {
-      return html`<hui-warning>Loading...</hui-warning>`;
+      return this._showError(error);
     }
 
     const backgroundColor = this.getBackgroundColor();
