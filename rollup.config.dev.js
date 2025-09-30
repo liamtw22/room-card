@@ -10,6 +10,7 @@ export default {
     file: 'dist/room-card.js',
     format: 'es',
     sourcemap: true,
+    inlineDynamicImports: true,
   },
   plugins: [
     nodeResolve({

@@ -271,7 +271,7 @@ export class RoomCard extends LitElement {
     };
 
     try {
-      handleClick(this, this.hass, { ...this._config, entity: device.entity }, actionConfig, false, false);
+      handleClick(this, this.hass, { ...this._config, entity: device.entity }, actionConfig, false);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this._showErrorTemporarily(error.message);
