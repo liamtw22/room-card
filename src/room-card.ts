@@ -22,7 +22,7 @@ console.info(
 // Register card in the card picker
 (window as any).customCards = (window as any).customCards || [];
 (window as any).customCards.push({
-  type: 'room-card',
+  type: 'room-card-test',
   name: 'Room Card Test',
   description: 'A beautiful room card with temperature, humidity, and device controls',
   preview: false,
