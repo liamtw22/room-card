@@ -2,6 +2,7 @@
   "name": "room-card",
   "version": "1.0.0",
   "description": "A beautiful room card for Home Assistant with temperature, humidity, and device controls",
+  "type": "module",
   "main": "dist/room-card.js",
   "scripts": {
     "start": "rollup -c rollup.config.dev.js --watch",
