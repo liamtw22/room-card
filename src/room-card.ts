@@ -10,11 +10,11 @@ import {
 import { HassEntity } from 'home-assistant-js-websocket';
 
 import type { RoomCardConfig, DeviceConfig } from './types';
-import { CARD_VERSION, DEFAULT_BACKGROUND_COLORS, TEMPERATURE_RANGES } from './const';
+import { CARD_VERSION, DEFAULT_BACKGROUND_COLOR } from './const';
 import { styles } from './styles';
 
 console.info(
-  `%c  ROOM-CARD \n%c  Version ${CARD_VERSION}    `,
+  `%c  ROOM-CARD-2 \n%c  Version ${CARD_VERSION}    `,
   'color: orange; font-weight: bold; background: black',
   'color: white; font-weight: bold; background: dimgray',
 );
@@ -22,18 +22,18 @@ console.info(
 // Register card in the card picker
 (window as any).customCards = (window as any).customCards || [];
 (window as any).customCards.push({
-  type: 'room-card-test',
-  name: 'Room Card Test',
+  type: 'room-card-2',
+  name: 'Room Card 2',
   description: 'A beautiful room card with temperature, humidity, and device controls',
   preview: false,
   documentationURL: 'https://github.com/liamtw22/room-card',
 });
 
-@customElement('room-card')
+@customElement('room-card-2')
 export class RoomCard extends LitElement {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     await import('./editor');
-    return document.createElement('room-card-editor') as LovelaceCardEditor;
+    return document.createElement('room-card-editor-2') as LovelaceCardEditor;
   }
 
   public static getStubConfig(): Partial<RoomCardConfig> {
@@ -63,7 +63,8 @@ export class RoomCard extends LitElement {
       temperature_unit: 'F',
       haptic_feedback: true,
       devices: [],
-      background_colors: DEFAULT_BACKGROUND_COLORS,
+      background_type: 'solid',
+      background_color: DEFAULT_BACKGROUND_COLOR,
       ...config,
     };
     this._error = undefined;
@@ -87,7 +88,48 @@ export class RoomCard extends LitElement {
     if (!this._config) {
       return false;
     }
-    return hasConfigOrEntityChanged(this, changedProps, false);
+    
+    // Always update if config changed
+    if (changedProps.has('_config')) {
+      return true;
+    }
+    
+    // Check if any monitored entities changed
+    if (changedProps.has('hass')) {
+      const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
+      if (!oldHass) {
+        return true;
+      }
+      
+      // Check temperature sensor
+      if (this._config.temperature_sensor && 
+          oldHass.states[this._config.temperature_sensor] !== this.hass.states[this._config.temperature_sensor]) {
+        return true;
+      }
+      
+      // Check humidity sensor
+      if (this._config.humidity_sensor && 
+          oldHass.states[this._config.humidity_sensor] !== this.hass.states[this._config.humidity_sensor]) {
+        return true;
+      }
+      
+      // Check device entities
+      if (this._config.devices) {
+        for (const device of this._config.devices) {
+          if (device.entity && oldHass.states[device.entity] !== this.hass.states[device.entity]) {
+            return true;
+          }
+        }
+      }
+      
+      // Check background entity if configured
+      if (this._config.background_entity && 
+          oldHass.states[this._config.background_entity] !== this.hass.states[this._config.background_entity]) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   protected render(): TemplateResult {
@@ -99,13 +141,13 @@ export class RoomCard extends LitElement {
       return this._showError(this._error);
     }
 
-    const backgroundColor = this._getBackgroundColor();
+    const backgroundColor = this._getBackgroundStyle();
 
     return html`
       <ha-card>
         ${this._config.name ? html`<div class="card-header">${this._config.name}</div>` : ''}
         <div class="card-content">
-          <div class="temperature-humidity-container" style="background-color: ${backgroundColor}">
+          <div class="temperature-humidity-container" style="${backgroundColor}">
             ${this._renderTemperature()} ${this._renderHumidity()}
           </div>
           ${this._renderDevices()}

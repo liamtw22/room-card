@@ -3,6 +3,8 @@ import { ActionConfig, LovelaceCardConfig } from 'custom-card-helpers';
 export interface RoomCardConfig extends LovelaceCardConfig {
   type: string;
   name?: string;
+  area?: string;
+  icon?: string;
   temperature_sensor?: string;
   humidity_sensor?: string;
   show_temperature?: boolean;
@@ -10,7 +12,13 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   temperature_unit?: 'C' | 'F';
   haptic_feedback?: boolean;
   devices?: DeviceConfig[];
-  background_colors?: BackgroundColors;
+  
+  // New background configuration
+  background_type?: 'solid' | 'entity';
+  background_color?: string;
+  background_entity?: string;
+  background_entity_attribute?: string;
+  
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
@@ -28,14 +36,6 @@ export interface DeviceConfig {
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
-}
-
-export interface BackgroundColors {
-  cold?: string;
-  cool?: string;
-  comfortable?: string;
-  warm?: string;
-  hot?: string;
 }
 
 export interface AreaRegistryEntry {

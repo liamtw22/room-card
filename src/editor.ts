@@ -38,94 +38,218 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       return html``;
     }
 
-    const schema = [
-      {
-        name: 'name',
-        label: 'Name',
-        selector: { text: {} },
-      },
-      {
-        name: 'temperature_sensor',
-        label: 'Temperature Sensor',
-        selector: {
-          entity: {
-            domain: 'sensor',
-            device_class: 'temperature',
-          },
-        },
-      },
-      {
-        name: 'humidity_sensor',
-        label: 'Humidity Sensor',
-        selector: {
-          entity: {
-            domain: 'sensor',
-            device_class: 'humidity',
-          },
-        },
-      },
-      {
-        name: 'show_temperature',
-        label: 'Show Temperature',
-        selector: { boolean: {} },
-      },
-      {
-        name: 'show_humidity',
-        label: 'Show Humidity',
-        selector: { boolean: {} },
-      },
-      {
-        name: 'temperature_unit',
-        label: 'Temperature Unit',
-        selector: {
-          select: {
-            options: [
-              { value: 'C', label: 'Celsius (°C)' },
-              { value: 'F', label: 'Fahrenheit (°F)' },
-            ],
-          },
-        },
-      },
-      {
-        name: 'haptic_feedback',
-        label: 'Haptic Feedback',
-        selector: { boolean: {} },
-      },
-    ];
-
-    const data = {
-      name: this._config.name || '',
-      temperature_sensor: this._config.temperature_sensor || '',
-      humidity_sensor: this._config.humidity_sensor || '',
-      show_temperature: this._config.show_temperature !== false,
-      show_humidity: this._config.show_humidity !== false,
-      temperature_unit: this._config.temperature_unit || 'F',
-      haptic_feedback: this._config.haptic_feedback !== false,
-    };
-
     return html`
       <div class="card-config">
-        <ha-form
+        <h3 class="section-header">Basic Configuration</h3>
+        
+        ${this._renderAreaSelector()}
+        ${this._renderDisplayName()}
+        ${this._renderIcon()}
+        ${this._renderHapticFeedback()}
+        
+        <h3 class="section-header">Appearance</h3>
+        
+        ${this._renderBackgroundOptions()}
+        
+        <h3 class="section-header">Temperature & Humidity</h3>
+        
+        ${this._renderTemperatureHumidity()}
+        
+        <h3 class="section-header">Devices</h3>
+        
+        ${this._renderDevices()}
+      </div>
+    `;
+  }
+
+  private _renderAreaSelector(): TemplateResult {
+    const areaOptions = this._areas.map(area => ({
+      value: area.area_id,
+      label: area.name,
+    }));
+
+    return html`
+      <div class="config-row">
+        <label>Area</label>
+        <ha-select
+          .label=${'Area'}
+          .value=${this._config.area || ''}
+          @selected=${this._areaChanged}
+          @closed=${(e: Event) => e.stopPropagation()}
+        >
+          <mwc-list-item value="">None</mwc-list-item>
+          ${areaOptions.map(
+            option => html`<mwc-list-item .value=${option.value}>${option.label}</mwc-list-item>`
+          )}
+        </ha-select>
+        ${this._config.area ? html`<div class="selected-area">Selected Area: ${this._getAreaName()}</div>` : ''}
+      </div>
+    `;
+  }
+
+  private _renderDisplayName(): TemplateResult {
+    return html`
+      <div class="config-row">
+        <ha-textfield
+          .label=${'Display Name (Optional)'}
+          .value=${this._config.name || ''}
+          @input=${(e: Event) => this._valueChanged('name', (e.target as HTMLInputElement).value)}
+        ></ha-textfield>
+      </div>
+    `;
+  }
+
+  private _renderIcon(): TemplateResult {
+    return html`
+      <div class="config-row">
+        <ha-textfield
+          .label=${'Icon (Optional)'}
+          .value=${this._config.icon || ''}
+          .placeholder=${'mdi:home'}
+          @input=${(e: Event) => this._valueChanged('icon', (e.target as HTMLInputElement).value)}
+        ></ha-textfield>
+      </div>
+    `;
+  }
+
+  private _renderHapticFeedback(): TemplateResult {
+    return html`
+      <div class="config-row">
+        <ha-formfield .label=${'Haptic Feedback'}>
+          <ha-switch
+            .checked=${this._config.haptic_feedback !== false}
+            @change=${(e: Event) => this._valueChanged('haptic_feedback', (e.target as HTMLInputElement).checked)}
+          ></ha-switch>
+        </ha-formfield>
+      </div>
+    `;
+  }
+
+  private _renderBackgroundOptions(): TemplateResult {
+    const bgType = this._config.background_type || 'solid';
+    
+    return html`
+      <div class="config-section">
+        <div class="config-row">
+          <label>Background Type</label>
+          <ha-select
+            .label=${'Background Type'}
+            .value=${bgType}
+            @selected=${(e: CustomEvent) => this._valueChanged('background_type', e.detail.value)}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <mwc-list-item value="solid">Static Color</mwc-list-item>
+            <mwc-list-item value="entity">Entity</mwc-list-item>
+          </ha-select>
+        </div>
+
+        ${bgType === 'solid' ? this._renderSolidColorOptions() : this._renderEntityBackgroundOptions()}
+      </div>
+    `;
+  }
+
+  private _renderSolidColorOptions(): TemplateResult {
+    return html`
+      <div class="config-row">
+        <label>Background Color</label>
+        <input
+          type="color"
+          class="color-input"
+          .value=${this._config.background_color || '#CDE3DB'}
+          @input=${(e: Event) => this._valueChanged('background_color', (e.target as HTMLInputElement).value)}
+        />
+        <span class="color-value">${this._config.background_color || '#CDE3DB'}</span>
+      </div>
+    `;
+  }
+
+  private _renderEntityBackgroundOptions(): TemplateResult {
+    return html`
+      <div class="config-row">
+        <ha-entity-picker
           .hass=${this.hass}
-          .data=${data}
-          .schema=${schema}
-          .computeLabel=${this._computeLabel}
-          @value-changed=${this._valueChanged}
-        ></ha-form>
+          .value=${this._config.background_entity || ''}
+          .label=${'Background Entity'}
+          @value-changed=${(e: CustomEvent) => this._valueChanged('background_entity', e.detail.value)}
+          allow-custom-entity
+        ></ha-entity-picker>
+      </div>
+      <div class="config-row">
+        <ha-textfield
+          .label=${'Entity Attribute (Optional)'}
+          .value=${this._config.background_entity_attribute || ''}
+          .placeholder=${'Leave empty to use state'}
+          @input=${(e: Event) => this._valueChanged('background_entity_attribute', (e.target as HTMLInputElement).value)}
+        ></ha-textfield>
+      </div>
+    `;
+  }
 
-        <div class="devices-section">
-          <h3>Devices</h3>
-          ${this._config.devices?.map((device, index) => this._renderDeviceConfig(device, index)) || ''}
-          <button class="add-device-button" @click=${this._addDevice}>
-            <ha-icon icon="mdi:plus"></ha-icon>
-            Add Device
-          </button>
+  private _renderTemperatureHumidity(): TemplateResult {
+    return html`
+      <div class="config-section">
+        <div class="config-row">
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._config.temperature_sensor || ''}
+            .label=${'Temperature Sensor'}
+            @value-changed=${(e: CustomEvent) => this._valueChanged('temperature_sensor', e.detail.value)}
+            allow-custom-entity
+          ></ha-entity-picker>
         </div>
 
-        <div class="background-colors-section">
-          <h3>Background Colors</h3>
-          ${this._renderColorPickers()}
+        <div class="config-row">
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._config.humidity_sensor || ''}
+            .label=${'Humidity Sensor'}
+            @value-changed=${(e: CustomEvent) => this._valueChanged('humidity_sensor', e.detail.value)}
+            allow-custom-entity
+          ></ha-entity-picker>
         </div>
+
+        <div class="config-row">
+          <ha-formfield .label=${'Show Temperature'}>
+            <ha-switch
+              .checked=${this._config.show_temperature !== false}
+              @change=${(e: Event) => this._valueChanged('show_temperature', (e.target as HTMLInputElement).checked)}
+            ></ha-switch>
+          </ha-formfield>
+        </div>
+
+        <div class="config-row">
+          <ha-formfield .label=${'Show Humidity'}>
+            <ha-switch
+              .checked=${this._config.show_humidity !== false}
+              @change=${(e: Event) => this._valueChanged('show_humidity', (e.target as HTMLInputElement).checked)}
+            ></ha-switch>
+          </ha-formfield>
+        </div>
+
+        <div class="config-row">
+          <label>Temperature Unit</label>
+          <ha-select
+            .label=${'Temperature Unit'}
+            .value=${this._config.temperature_unit || 'F'}
+            @selected=${(e: CustomEvent) => this._valueChanged('temperature_unit', e.detail.value)}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <mwc-list-item value="C">Celsius</mwc-list-item>
+            <mwc-list-item value="F">Fahrenheit</mwc-list-item>
+          </ha-select>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderDevices(): TemplateResult {
+    return html`
+      <div class="devices-section">
+        ${this._config.devices?.map((device, index) => this._renderDeviceConfig(device, index)) || ''}
+        <button class="add-device-button" @click=${this._addDevice}>
+          <ha-icon icon="mdi:plus"></ha-icon>
+          Add Device
+        </button>
       </div>
     `;
   }
@@ -147,88 +271,68 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
           .hass=${this.hass}
           .value=${device.entity || ''}
           .label=${'Entity'}
-          @value-changed=${(ev: CustomEvent) => this._deviceEntityChanged(ev, index)}
+          @value-changed=${(e: CustomEvent) => this._devicePropertyChanged(index, 'entity', e.detail.value)}
           allow-custom-entity
         ></ha-entity-picker>
 
         <ha-textfield
           .label=${'Name (optional)'}
           .value=${device.name || ''}
-          @input=${(ev: Event) => this._devicePropertyChanged(ev, index, 'name')}
+          @input=${(e: Event) => this._devicePropertyChanged(index, 'name', (e.target as HTMLInputElement).value)}
         ></ha-textfield>
 
         <ha-select
           .label=${'Type'}
           .value=${device.type || 'light'}
-          @selected=${(ev: CustomEvent) => this._deviceTypeChanged(ev, index)}
+          @selected=${(e: CustomEvent) => this._devicePropertyChanged(index, 'type', e.detail.value)}
+          @closed=${(e: Event) => e.stopPropagation()}
         >
-          ${DEVICE_TYPES.map(
-            (type) => html` <mwc-list-item .value=${type}>${type}</mwc-list-item> `,
-          )}
+          ${DEVICE_TYPES.map(type => html`<mwc-list-item .value=${type}>${type}</mwc-list-item>`)}
         </ha-select>
 
         <ha-textfield
           .label=${'Icon (optional)'}
           .value=${device.icon || ''}
-          @input=${(ev: Event) => this._devicePropertyChanged(ev, index, 'icon')}
+          @input=${(e: Event) => this._devicePropertyChanged(index, 'icon', (e.target as HTMLInputElement).value)}
         ></ha-textfield>
 
         <ha-select
           .label=${'Control Type'}
           .value=${device.control_type || 'continuous'}
-          @selected=${(ev: CustomEvent) => this._deviceControlTypeChanged(ev, index)}
+          @selected=${(e: CustomEvent) => this._devicePropertyChanged(index, 'control_type', e.detail.value)}
+          @closed=${(e: Event) => e.stopPropagation()}
         >
           <mwc-list-item value="continuous">Continuous (Slider)</mwc-list-item>
           <mwc-list-item value="discrete">Discrete (Buttons)</mwc-list-item>
         </ha-select>
 
-        ${device.control_type === 'discrete'
-          ? html`
-              <ha-textfield
-                .label=${'Modes (comma separated)'}
-                .value=${device.modes?.join(', ') || ''}
-                @input=${(ev: Event) => this._deviceModesChanged(ev, index)}
-              ></ha-textfield>
-            `
-          : ''}
+        ${device.control_type === 'discrete' ? html`
+          <ha-textfield
+            .label=${'Modes (comma separated)'}
+            .value=${device.modes?.join(', ') || ''}
+            @input=${(e: Event) => this._deviceModesChanged(index, (e.target as HTMLInputElement).value)}
+          ></ha-textfield>
+        ` : ''}
       </div>
     `;
   }
 
-  private _renderColorPickers(): TemplateResult {
-    const colors = this._config.background_colors || {};
-    const colorLabels = {
-      cold: 'Cold (< 61°F / 16°C)',
-      cool: 'Cool (61-64°F / 16-18°C)',
-      comfortable: 'Comfortable (64-75°F / 18-24°C)',
-      warm: 'Warm (75-81°F / 24-27°C)',
-      hot: 'Hot (> 81°F / 27°C)',
-    };
-
-    return html`
-      ${Object.entries(colorLabels).map(
-        ([key, label]) => html`
-          <div class="color-picker">
-            <label>${label}</label>
-            <input
-              type="color"
-              .value=${colors[key as keyof typeof colors] || '#CDE3DB'}
-              @input=${(ev: Event) => this._colorChanged(ev, key)}
-            />
-          </div>
-        `,
-      )}
-    `;
+  private _getAreaName(): string {
+    if (!this._config.area) return '';
+    const area = this._areas.find(a => a.area_id === this._config.area);
+    return area ? area.name : this._config.area;
   }
 
-  private _computeLabel = (schema: any): string => {
-    return schema.label || schema.name;
-  };
+  private _areaChanged(e: CustomEvent): void {
+    this._valueChanged('area', e.detail.value);
+  }
 
-  private _valueChanged(ev: CustomEvent): void {
+  private _valueChanged(key: string, value: any): void {
+    if (!this._config) return;
+    
     const newConfig = {
       ...this._config,
-      ...ev.detail.value,
+      [key]: value,
     };
 
     this._config = newConfig;
@@ -243,123 +347,27 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       control_type: 'continuous',
     });
 
-    const newConfig = {
-      ...this._config,
-      devices,
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
+    this._valueChanged('devices', devices);
   }
 
   private _removeDevice(index: number): void {
     const devices = [...(this._config.devices || [])];
     devices.splice(index, 1);
-
-    const newConfig = {
-      ...this._config,
-      devices,
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
+    this._valueChanged('devices', devices);
   }
 
-  private _deviceEntityChanged(ev: CustomEvent, index: number): void {
+  private _devicePropertyChanged(index: number, property: string, value: any): void {
     const devices = [...(this._config.devices || [])];
     devices[index] = {
       ...devices[index],
-      entity: ev.detail.value,
+      [property]: value,
     };
-
-    const newConfig = {
-      ...this._config,
-      devices,
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
+    this._valueChanged('devices', devices);
   }
 
-  private _deviceTypeChanged(ev: CustomEvent, index: number): void {
-    const devices = [...(this._config.devices || [])];
-    devices[index] = {
-      ...devices[index],
-      type: ev.detail.value,
-    };
-
-    const newConfig = {
-      ...this._config,
-      devices,
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
-  }
-
-  private _deviceControlTypeChanged(ev: CustomEvent, index: number): void {
-    const devices = [...(this._config.devices || [])];
-    devices[index] = {
-      ...devices[index],
-      control_type: ev.detail.value,
-    };
-
-    const newConfig = {
-      ...this._config,
-      devices,
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
-  }
-
-  private _devicePropertyChanged(ev: Event, index: number, property: string): void {
-    const target = ev.target as HTMLInputElement;
-    const devices = [...(this._config.devices || [])];
-    devices[index] = {
-      ...devices[index],
-      [property]: target.value,
-    };
-
-    const newConfig = {
-      ...this._config,
-      devices,
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
-  }
-
-  private _deviceModesChanged(ev: Event, index: number): void {
-    const target = ev.target as HTMLInputElement;
-    const modes = target.value.split(',').map((m) => m.trim());
-    const devices = [...(this._config.devices || [])];
-    devices[index] = {
-      ...devices[index],
-      modes,
-    };
-
-    const newConfig = {
-      ...this._config,
-      devices,
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
-  }
-
-  private _colorChanged(ev: Event, colorKey: string): void {
-    const target = ev.target as HTMLInputElement;
-    const newConfig = {
-      ...this._config,
-      background_colors: {
-        ...this._config.background_colors,
-        [colorKey]: target.value,
-      },
-    };
-
-    this._config = newConfig;
-    fireEvent(this, 'config-changed', { config: newConfig });
+  private _deviceModesChanged(index: number, value: string): void {
+    const modes = value.split(',').map(m => m.trim()).filter(m => m);
+    this._devicePropertyChanged(index, 'modes', modes);
   }
 
   static get styles(): CSSResultGroup {
@@ -367,21 +375,65 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       .card-config {
         display: flex;
         flex-direction: column;
-        gap: 24px;
-      }
-
-      .devices-section,
-      .background-colors-section {
-        display: flex;
-        flex-direction: column;
         gap: 16px;
       }
 
-      h3 {
-        margin: 0;
+      .section-header {
+        margin: 16px 0 8px 0;
         font-size: 16px;
         font-weight: 500;
         color: var(--primary-text-color);
+        border-bottom: 1px solid var(--divider-color);
+        padding-bottom: 8px;
+      }
+
+      .section-header:first-child {
+        margin-top: 0;
+      }
+
+      .config-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .config-row {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .config-row label {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--secondary-text-color);
+      }
+
+      .selected-area {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        font-style: italic;
+        margin-top: -4px;
+      }
+
+      .color-input {
+        width: 60px;
+        height: 40px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .color-value {
+        font-size: 14px;
+        color: var(--secondary-text-color);
+        font-family: monospace;
+      }
+
+      .devices-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
       }
 
       .device-config {
@@ -409,6 +461,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       .add-device-button {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 8px;
         padding: 12px 16px;
         border: 2px dashed var(--divider-color);
@@ -427,30 +480,15 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         color: var(--text-primary-color);
       }
 
-      .color-picker {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 8px 0;
-      }
-
-      .color-picker label {
-        font-size: 14px;
-        color: var(--primary-text-color);
-      }
-
-      .color-picker input[type='color'] {
-        width: 60px;
-        height: 40px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        cursor: pointer;
-      }
-
       ha-entity-picker,
       ha-textfield,
       ha-select {
         width: 100%;
+      }
+
+      ha-formfield {
+        display: flex;
+        align-items: center;
       }
     `;
   }
