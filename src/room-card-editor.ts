@@ -1,7 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
-import { fireEvent } from './fire-event';
+import { HomeAssistant, LovelaceCardEditor, fireEvent } from 'custom-card-helpers';
 import './ha-form';
 import './ha-expansion-panel';
 import './ha-selector';
