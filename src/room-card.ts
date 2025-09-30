@@ -6,7 +6,6 @@ import {
   LovelaceCardEditor,
   handleClick,
   ActionConfig,
-  computeStateName,
 } from 'custom-card-helpers';
 import { HassEntity } from 'home-assistant-js-websocket';
 
@@ -182,7 +181,7 @@ export class RoomCard extends LitElement {
     }
 
     const isOn = stateObj.state !== 'off' && stateObj.state !== 'unavailable';
-    const name = device.name || computeStateName(stateObj);
+    const name = device.name || stateObj.attributes.friendly_name || stateObj.entity_id;
     const icon = device.icon || this._getDeviceIcon(device.type, stateObj);
 
     return html`
@@ -216,7 +215,7 @@ export class RoomCard extends LitElement {
 
   private _renderContinuousControl(device: DeviceConfig, stateObj: HassEntity): TemplateResult {
     let value = 0;
-    const max = device.max_value || 100;
+    let max = device.max_value || 100;
     const min = device.min_value || 0;
 
     if (device.type === 'light' && stateObj.attributes.brightness !== undefined) {
@@ -272,7 +271,7 @@ export class RoomCard extends LitElement {
     };
 
     try {
-      handleClick(this, this.hass, { ...this._config, entity: device.entity }, actionConfig);
+      handleClick(this, this.hass, { ...this._config, entity: device.entity }, actionConfig, false, false);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this._showErrorTemporarily(error.message);
