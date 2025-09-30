@@ -1,8 +1,8 @@
 import { LitElement, html, css, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, LovelaceCardConfig, handleAction, hasAction, fireEvent, computeStateDisplay, stateIcon, forwardHaptic, toggleEntity, memoize } from 'custom-card-helpers';
+import { HomeAssistant, LovelaceCardConfig, handleAction, hasAction, fireEvent, computeStateDisplay, stateIcon, forwardHaptic, toggleEntity } from 'custom-card-helpers';
 import { guard } from 'lit/directives/guard.js';
-import './ha-card';
+import memoizeOne from "memoize-one";
 import './hui-warning';
 import './ha-state-icon';
 import './ha-icon';
@@ -63,7 +63,7 @@ export class RoomCard extends LitElement {
   private _attachedListeners: Array<[string, EventListener]> = [];
 
   // Memoized functions
-  private _getDeviceState = memoize((entityId: string, hass: HomeAssistant) => {
+  private _getDeviceState = memoizeOne((entityId: string, hass: HomeAssistant) => {
     return hass.states[entityId];
   });
 
@@ -238,7 +238,7 @@ export class RoomCard extends LitElement {
     
     if (this._config.name) return this._config.name;
     
-    const area = this.hass.areas[this._config.area];
+    const area = (this.hass as any).areas?.[this._config.area];
     return area?.name || this._config.area;
   }
 
