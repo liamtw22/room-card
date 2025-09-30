@@ -23,7 +23,7 @@ console.info(
 (window as any).customCards = (window as any).customCards || [];
 (window as any).customCards.push({
   type: 'room-card',
-  name: 'Room Card',
+  name: 'Room Card Test',
   description: 'A beautiful room card with temperature, humidity, and device controls',
   preview: false,
   documentationURL: 'https://github.com/liamtw22/room-card',
