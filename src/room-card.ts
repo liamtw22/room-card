@@ -32,7 +32,7 @@ console.info(
 export class RoomCard extends LitElement {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     await import('./editor');
-    return document.createElement('room-card-editor-2') as LovelaceCardEditor;
+    return document.createElement('room-card-editor') as LovelaceCardEditor;
   }
 
   public static getStubConfig(): Partial<RoomCardConfig> {
