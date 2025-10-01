@@ -2,8 +2,8 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant } from 'custom-card-helpers';
 
-@customElement('room-card-test-editor')
-export class RoomCardTestEditor extends LitElement {
+@customElement('room-card-editor')
+export class RoomCardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config?: any;
 
@@ -583,6 +583,6 @@ export class RoomCardTestEditor extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'room-card-test-editor': RoomCardTestEditor;
+    'room-card-editor': RoomCardEditor;
   }
 }
