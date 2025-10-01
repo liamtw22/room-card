@@ -2,8 +2,8 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant } from 'custom-card-helpers';
 
-@customElement('room-card-test-editor')
-export class RoomCardTestEditor extends LitElement {
+@customElement('room-card-editor')
+export class RoomCardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config?: any;
   @state() private _expandedSections = {
@@ -322,14 +322,28 @@ export class RoomCardTestEditor extends LitElement {
                   <ha-textfield
                     label="Min"
                     type="number"
-                    .value=${range.min !== undefined ? range.min : ''}
-                    @input=${(e: any) => this._updateColorRange(configKey, index, 'min', parseFloat(e.target.value))}
+                    .value=${range.min !== undefined && range.min !== null ? String(range.min) : ''}
+                    @input=${(e: any) => {
+                      const val = e.target.value;
+                      if (val === '' || val === null) return;
+                      const parsed = parseFloat(val);
+                      if (!isNaN(parsed)) {
+                        this._updateColorRange(configKey, index, 'min', parsed);
+                      }
+                    }}
                   ></ha-textfield>
                   <ha-textfield
                     label="Max"
                     type="number"
-                    .value=${range.max !== undefined ? range.max : ''}
-                    @input=${(e: any) => this._updateColorRange(configKey, index, 'max', parseFloat(e.target.value))}
+                    .value=${range.max !== undefined && range.max !== null ? String(range.max) : ''}
+                    @input=${(e: any) => {
+                      const val = e.target.value;
+                      if (val === '' || val === null) return;
+                      const parsed = parseFloat(val);
+                      if (!isNaN(parsed)) {
+                        this._updateColorRange(configKey, index, 'max', parsed);
+                      }
+                    }}
                   ></ha-textfield>
                 `}
                 <ha-textfield
@@ -757,6 +771,12 @@ export class RoomCardTestEditor extends LitElement {
   private _updateColorRange(configKey: string, index: number, field: string, value: any) {
     const config = this._config[configKey];
     const ranges = [...(config.ranges || [])];
+    
+    // Handle numeric fields - don't update if NaN or empty
+    if ((field === 'min' || field === 'max') && (isNaN(value) || value === null || value === undefined || value === '')) {
+      return;
+    }
+    
     ranges[index] = { ...ranges[index], [field]: value };
     this._updateConfig({
       [configKey]: { ...config, ranges }
@@ -775,19 +795,21 @@ export class RoomCardTestEditor extends LitElement {
   private _toggleRangeType(configKey: string, index: number) {
     const config = this._config[configKey];
     const ranges = [...(config.ranges || [])];
-    const range = ranges[index];
+    const range = { ...ranges[index] };
 
     if (range.state !== undefined) {
-      delete range.state;
-      range.min = 0;
-      range.max = 100;
+      // Switch to numeric - remove state and add min/max
+      const newRange: any = { color: range.color };
+      newRange.min = 0;
+      newRange.max = 100;
+      ranges[index] = newRange;
     } else {
-      delete range.min;
-      delete range.max;
-      range.state = 'on';
+      // Switch to state - remove min/max and add state
+      const newRange: any = { color: range.color };
+      newRange.state = 'on';
+      ranges[index] = newRange;
     }
-
-    ranges[index] = range;
+    
     this._updateConfig({
       [configKey]: { ...config, ranges }
     });
@@ -1112,6 +1134,6 @@ export class RoomCardTestEditor extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'room-card-test-editor': RoomCardTestEditor;
+    'room-card-editor': RoomCardEditor;
   }
 }
