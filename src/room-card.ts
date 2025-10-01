@@ -403,15 +403,15 @@ export class RoomCard extends LitElement {
   }
 
   private angleToValue(angle: number): number {
-    let normalizedAngle = this.normalizeAngle(angle);
-    let normalizedStart = this.normalizeAngle(this.startAngle);
+    const normalizedAngle = this.normalizeAngle(angle);
+    const normalizedStart = this.normalizeAngle(this.startAngle);
     let angleFromStart = normalizedAngle - normalizedStart;
 
     if (angleFromStart < 0) angleFromStart += 360;
 
     if (angleFromStart > this.totalAngle) {
-      let distToStart = Math.min(angleFromStart, 360 - angleFromStart);
-      let distToEnd = Math.min(
+      const distToStart = Math.min(angleFromStart, 360 - angleFromStart);
+      const distToEnd = Math.min(
         Math.abs(angleFromStart - this.totalAngle),
         360 - Math.abs(angleFromStart - this.totalAngle)
       );
@@ -427,7 +427,7 @@ export class RoomCard extends LitElement {
   }
 
   private pointToAngle(x: number, y: number, centerX: number, centerY: number): number {
-    let angle = Math.atan2(y - centerY, x - centerX);
+    const angle = Math.atan2(y - centerY, x - centerX);
     return this.radiansToDegrees(angle);
   }
 
