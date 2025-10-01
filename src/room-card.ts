@@ -30,7 +30,6 @@ export class RoomCard extends LitElement {
   @state() private sliderValue = 0;
   @state() private devices: DeviceConfig[] = [];
 
-  // Slider configuration
   private startAngle = -110;
   private endAngle = 30;
   private totalAngle = 140;
@@ -387,7 +386,6 @@ export class RoomCard extends LitElement {
     return onColor || "#2196F3";
   }
 
-  // Circular slider methods
   private degreesToRadians(degrees: number): number {
     return degrees * Math.PI / 180;
   }
@@ -520,6 +518,7 @@ export class RoomCard extends LitElement {
 
     const currentDevice = this.devices[this.currentDeviceIndex];
     const controlEntity = currentDevice.control_entity || currentDevice.entity;
+    const domain = controlEntity.split('.')[0];
 
     if (currentDevice.type === "discrete" && currentDevice.modes) {
       const modes = currentDevice.modes;
@@ -533,41 +532,63 @@ export class RoomCard extends LitElement {
       }
 
       if (selectedMode.percentage === 0) {
-        this.hass.callService("fan", "turn_off", {
+        this.hass.callService(domain, "turn_off", {
           entity_id: controlEntity
         });
       } else {
-        this.hass.callService("fan", "set_percentage", {
+        this.hass.callService(domain, "set_percentage", {
           entity_id: controlEntity,
           percentage: selectedMode.percentage
         });
       }
     } else {
       const actualValue = Math.round(value * (currentDevice.scale || 100));
+      const attribute = currentDevice.attribute || 'brightness';
 
-      if (currentDevice.attribute === "brightness") {
+      if (attribute === "brightness") {
         if (actualValue === 0) {
-          this.hass.callService("light", "turn_off", {
+          this.hass.callService(domain, "turn_off", {
             entity_id: controlEntity
           });
         } else {
-          this.hass.callService("light", "turn_on", {
+          this.hass.callService(domain, "turn_on", {
             entity_id: controlEntity,
             brightness: actualValue,
           });
         }
-      } else if (currentDevice.attribute === "volume_level") {
+      } else if (attribute === "volume_level") {
         if (value === 0) {
-          this.hass.callService("media_player", "volume_mute", {
+          this.hass.callService(domain, "volume_mute", {
             entity_id: controlEntity,
             is_volume_muted: true
           });
         } else {
-          this.hass.callService("media_player", "volume_set", {
+          this.hass.callService(domain, "volume_set", {
             entity_id: controlEntity,
             volume_level: value,
           });
         }
+      } else if (attribute === "temperature") {
+        this.hass.callService(domain, "set_temperature", {
+          entity_id: controlEntity,
+          temperature: actualValue,
+        });
+      } else if (attribute === "percentage") {
+        if (actualValue === 0) {
+          this.hass.callService(domain, "turn_off", {
+            entity_id: controlEntity
+          });
+        } else {
+          this.hass.callService(domain, "set_percentage", {
+            entity_id: controlEntity,
+            percentage: actualValue,
+          });
+        }
+      } else if (attribute === "position") {
+        this.hass.callService(domain, "set_cover_position", {
+          entity_id: controlEntity,
+          position: actualValue,
+        });
       }
     }
   }
@@ -583,24 +604,26 @@ export class RoomCard extends LitElement {
     const tempHumidity = this.getTempHumidity();
     const roomName = this.getAreaName();
 
+    const roomNameColor = this._config.room_name_color || '#000000';
+    const roomNameSize = this._config.room_name_size || '14px';
+    const tempHumidityColor = this._config.temp_humidity_color || '#353535';
+    const tempHumiditySize = this._config.temp_humidity_size || '12px';
+
     const hasActiveDevice = this.currentDeviceIndex !== -1;
     const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
     const deviceEntity = currentDevice ? this.hass.states[currentDevice.control_entity || currentDevice.entity] : null;
     const isDeviceOn = deviceEntity && (deviceEntity.state === "on" || deviceEntity.state === "playing");
     const showSlider = currentDevice?.show_slider !== false;
 
-    // Calculate positions
     const centerX = 75;
     const centerY = 75;
     const radius = 56;
 
-    // Calculate thumb position
     const thumbAngle = this.valueToAngle(this.sliderValue);
     const thumbAngleRad = this.degreesToRadians(thumbAngle);
     const thumbX = centerX + radius * Math.cos(thumbAngleRad);
     const thumbY = centerY + radius * Math.sin(thumbAngleRad);
 
-    // Calculate arc endpoints
     const startAngleRad = this.degreesToRadians(this.startAngle);
     const endAngleRad = this.degreesToRadians(this.endAngle);
     const startX = centerX + radius * Math.cos(startAngleRad);
@@ -608,17 +631,14 @@ export class RoomCard extends LitElement {
     const endX = centerX + radius * Math.cos(endAngleRad);
     const endY = centerY + radius * Math.sin(endAngleRad);
 
-    // Calculate the current angle for the progress arc
     const progressAngle = this.sliderValue * this.totalAngle;
     const largeArcFlag = progressAngle > 180 ? 1 : 0;
 
-    // Get slider color
     let sliderColor = '#2196F3';
     if (currentDevice) {
       sliderColor = this.getSliderColor(currentDevice, deviceEntity);
     }
 
-    // Organize devices into columns
     const chipColumns = this._config.chip_columns || 1;
     const deviceColumns: DeviceConfig[][] = [];
     const visibleDevices = this.devices.filter(d => d.show_chip !== false);
@@ -627,17 +647,27 @@ export class RoomCard extends LitElement {
       deviceColumns[i] = [];
     }
 
-    visibleDevices.forEach((device, index) => {
-      const columnIndex = index % chipColumns;
-      deviceColumns[columnIndex].push(device);
+    visibleDevices.forEach((device) => {
+      const columnIndex = (device.chip_column || 1) - 1;
+      if (columnIndex >= 0 && columnIndex < chipColumns) {
+        deviceColumns[columnIndex].push(device);
+      } else {
+        deviceColumns[0].push(device);
+      }
     });
 
     return html`
       <div class="card-container" style="background-color: ${backgroundColor}">
         <div class="main-content">
           <div class="title-section">
-            <div class="room-name">${roomName}</div>
-            ${tempHumidity ? html`<div class="temp-humidity">${tempHumidity}</div>` : ''}
+            <div class="room-name" style="color: ${roomNameColor}; font-size: ${roomNameSize}">
+              ${roomName}
+            </div>
+            ${tempHumidity ? html`
+              <div class="temp-humidity" style="color: ${tempHumidityColor}; font-size: ${tempHumiditySize}">
+                ${tempHumidity}
+              </div>
+            ` : ''}
           </div>
 
           <div class="icon-section">
@@ -655,18 +685,15 @@ export class RoomCard extends LitElement {
                   @pointermove=${this.handlePointerMove}
                   @pointerup=${this.handlePointerUp}
                   @pointercancel=${this.handlePointerUp}>
-                  <!-- Track arc -->
                   <path
                     class="slider-track"
                     d="M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}"
                   />
-                  <!-- Progress arc -->
                   <path
                     class="slider-progress"
                     style="stroke: ${sliderColor}"
                     d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
                   />
-                  <!-- Thumb -->
                   <circle
                     class="slider-thumb ${this.isDragging ? 'dragging' : ''}"
                     style="fill: ${sliderColor}"
@@ -674,7 +701,6 @@ export class RoomCard extends LitElement {
                     cy="${thumbY}"
                     r="16"
                   />
-                  <!-- Icon on thumb -->
                   <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
                       <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_color || 'white'};"></ha-icon>
@@ -745,7 +771,6 @@ export class RoomCard extends LitElement {
 
       .title-section {
         grid-area: title;
-        font-size: 14px;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -755,13 +780,10 @@ export class RoomCard extends LitElement {
 
       .room-name {
         font-weight: 500;
-        color: #000000;
         margin-top: 5px;
       }
 
       .temp-humidity {
-        font-size: 12px;
-        color: #353535;
         font-weight: 400;
       }
 
@@ -852,7 +874,8 @@ export class RoomCard extends LitElement {
       .chips-section {
         grid-area: chips;
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
+        gap: 4px;
         margin-right: 8px;
         margin-top: 8px;
         margin-bottom: 8px;

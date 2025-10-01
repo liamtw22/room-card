@@ -1,47 +1,59 @@
-import { ActionConfig, LovelaceCardConfig } from 'custom-card-helpers';
-
-export interface RoomCardConfig extends LovelaceCardConfig {
+export interface RoomCardConfig {
   type: string;
+  area: string;
   name?: string;
-  area?: string;
   icon?: string;
+  background?: string | EntityColorConfig;
+  icon_color?: string | EntityColorConfig;
+  icon_background?: string | EntityColorConfig;
   temperature_sensor?: string;
   humidity_sensor?: string;
   show_temperature?: boolean;
   show_humidity?: boolean;
-  temperature_unit?: 'C' | 'F';
+  temperature_unit?: 'F' | 'C';
   haptic_feedback?: boolean;
   devices?: DeviceConfig[];
+  chip_columns?: number;
   
-  // New background configuration
-  background_type?: 'solid' | 'entity';
-  background_color?: string;
-  background_entity?: string;
-  background_entity_attribute?: string;
-  
-  tap_action?: ActionConfig;
-  hold_action?: ActionConfig;
-  double_tap_action?: ActionConfig;
+  // Font customization
+  room_name_color?: string;
+  room_name_size?: string;
+  temp_humidity_color?: string;
+  temp_humidity_size?: string;
 }
 
 export interface DeviceConfig {
   entity: string;
-  type: 'light' | 'speaker' | 'purifier' | 'fan' | 'switch';
+  control_entity?: string;
   name?: string;
   icon?: string;
-  control_type?: 'continuous' | 'discrete';
-  min_value?: number;
-  max_value?: number;
-  modes?: string[];
-  tap_action?: ActionConfig;
-  hold_action?: ActionConfig;
-  double_tap_action?: ActionConfig;
+  type?: 'continuous' | 'discrete';
+  attribute?: string;
+  scale?: number;
+  modes?: ModeConfig[];
+  show_chip?: boolean;
+  show_slider?: boolean;
+  color_on?: string;
+  color_off?: string;
+  color_unavailable?: string;
+  icon_color?: string;
+  chip_column?: number;
 }
 
-export interface AreaRegistryEntry {
-  area_id: string;
-  name: string;
-  picture?: string | null;
-  icon?: string | null;
-  aliases?: string[];
+export interface ModeConfig {
+  label: string;
+  value: number;
+  percentage: number;
+}
+
+export interface EntityColorConfig {
+  entity: string;
+  ranges?: ColorRange[];
+}
+
+export interface ColorRange {
+  min?: number;
+  max?: number;
+  state?: string;
+  color: string;
 }
