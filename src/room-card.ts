@@ -535,7 +535,7 @@ export class RoomCard extends LitElement {
     const y = e.clientY - rect.top - centerY;
 
     const angle = this.radiansToDegrees(Math.atan2(y, x));
-    const newValue = this.angleToValue(angle);
+    let newValue = this.angleToValue(angle);
 
     if (!this.thumbTapped) {
       this.sliderValue = newValue;
