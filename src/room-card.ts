@@ -4,7 +4,7 @@ import { HomeAssistant } from 'custom-card-helpers';
 import { HassEntity } from 'home-assistant-js-websocket';
 
 import type { RoomCardConfig, DeviceConfig } from './types';
-import { CARD_VERSION } from './const';
+import { CARD_VERSION, DEFAULT_FONT_COLOR, DEFAULT_CHIP_ON_COLOR, DEFAULT_CHIP_OFF_COLOR, DEFAULT_CHIP_UNAVAILABLE_COLOR, DEFAULT_ICON_ON_COLOR, DEFAULT_ICON_OFF_COLOR, DEFAULT_ICON_UNAVAILABLE_COLOR } from './const';
 import './editor';
 
 console.info(
@@ -46,11 +46,8 @@ export class RoomCard extends LitElement {
       name: '',
       background: 'var(--ha-card-background)',
       icon: 'mdi:home',
-      temperature_sensor: '',
-      humidity_sensor: '',
-      show_temperature: true,
-      show_humidity: true,
-      temperature_unit: 'F',
+      display_entity_1: '',
+      display_entity_2: '',
       haptic_feedback: true,
       devices: []
     };
@@ -59,6 +56,18 @@ export class RoomCard extends LitElement {
   public setConfig(config: RoomCardConfig): void {
     if (!config.area) {
       throw new Error("You need to define an area");
+    }
+
+    // Handle backwards compatibility
+    if (config.temperature_sensor && !config.display_entity_1) {
+      config.display_entity_1 = config.temperature_sensor;
+      config.display_entity_1_attribute = 'state';
+      config.display_entity_1_unit = config.temperature_unit === 'C' ? '°C' : '°F';
+    }
+    if (config.humidity_sensor && !config.display_entity_2) {
+      config.display_entity_2 = config.humidity_sensor;
+      config.display_entity_2_attribute = 'state';
+      config.display_entity_2_unit = '%';
     }
 
     this._config = {
@@ -70,7 +79,17 @@ export class RoomCard extends LitElement {
 
   private _initializeDevices() {
     if (!this._config) return;
-    this.devices = this._config.devices || [];
+    
+    // Handle backwards compatibility for device colors
+    this.devices = (this._config.devices || []).map(device => ({
+      ...device,
+      chip_on_color: device.chip_on_color || device.color_on || DEFAULT_CHIP_ON_COLOR,
+      chip_off_color: device.chip_off_color || device.color_off || DEFAULT_CHIP_OFF_COLOR,
+      chip_unavailable_color: device.chip_unavailable_color || device.color_unavailable || DEFAULT_CHIP_UNAVAILABLE_COLOR,
+      icon_on_color: device.icon_on_color || device.icon_color || DEFAULT_ICON_ON_COLOR,
+      icon_off_color: device.icon_off_color || DEFAULT_ICON_OFF_COLOR,
+      icon_unavailable_color: device.icon_unavailable_color || DEFAULT_ICON_UNAVAILABLE_COLOR,
+    }));
   }
 
   public getCardSize(): number {
@@ -215,6 +234,12 @@ export class RoomCard extends LitElement {
             }
           }
         }
+        
+        for (const range of iconColor.ranges) {
+          if (range.state && entity.state === range.state) {
+            return range.color;
+          }
+        }
       }
     }
 
@@ -241,31 +266,56 @@ export class RoomCard extends LitElement {
             }
           }
         }
+        
+        for (const range of iconBg.ranges) {
+          if (range.state && entity.state === range.state) {
+            return range.color;
+          }
+        }
       }
     }
 
     return "rgba(255, 255, 255, 0.2)";
   }
 
-  private getTempHumidity(): string {
+  private getDisplayText(): string {
     if (!this.hass || !this._config) return "";
 
     const parts: string[] = [];
 
-    if (this._config.show_temperature !== false && this._config.temperature_sensor) {
-      const tempEntity = this.hass.states[this._config.temperature_sensor];
-      if (tempEntity && tempEntity.state !== 'unavailable') {
-        const temp = parseFloat(tempEntity.state).toFixed(1);
-        const unit = this._config.temperature_unit || 'F';
-        parts.push(`${temp}°${unit}`);
+    // Entity 1
+    if (this._config.display_entity_1) {
+      const entity = this.hass.states[this._config.display_entity_1];
+      if (entity && entity.state !== 'unavailable') {
+        const attribute = this._config.display_entity_1_attribute || 'state';
+        let value = attribute === 'state' ? entity.state : entity.attributes[attribute];
+        
+        if (value !== undefined) {
+          const numValue = parseFloat(String(value));
+          if (!isNaN(numValue)) {
+            value = numValue.toFixed(1);
+          }
+          const unit = this._config.display_entity_1_unit || '';
+          parts.push(`${value}${unit}`);
+        }
       }
     }
 
-    if (this._config.show_humidity !== false && this._config.humidity_sensor) {
-      const humEntity = this.hass.states[this._config.humidity_sensor];
-      if (humEntity && humEntity.state !== 'unavailable') {
-        const humidity = parseFloat(humEntity.state).toFixed(1);
-        parts.push(`${humidity}%`);
+    // Entity 2
+    if (this._config.display_entity_2) {
+      const entity = this.hass.states[this._config.display_entity_2];
+      if (entity && entity.state !== 'unavailable') {
+        const attribute = this._config.display_entity_2_attribute || 'state';
+        let value = attribute === 'state' ? entity.state : entity.attributes[attribute];
+        
+        if (value !== undefined) {
+          const numValue = parseFloat(String(value));
+          if (!isNaN(numValue)) {
+            value = numValue.toFixed(1);
+          }
+          const unit = this._config.display_entity_2_unit || '';
+          parts.push(`${value}${unit}`);
+        }
       }
     }
 
@@ -355,29 +405,45 @@ export class RoomCard extends LitElement {
   }
 
   private getChipColor(device: DeviceConfig, entity: string): string {
-    if (!this.hass) return device.color_unavailable || "rgba(128, 128, 128, 0.5)";
+    if (!this.hass) return device.chip_unavailable_color || DEFAULT_CHIP_UNAVAILABLE_COLOR;
 
     const stateObj = this.hass.states[entity];
 
     if (!stateObj || stateObj.state === 'unavailable') {
-      return device.color_unavailable || "rgba(128, 128, 128, 0.5)";
+      return device.chip_unavailable_color || DEFAULT_CHIP_UNAVAILABLE_COLOR;
     }
 
     if (stateObj.state !== "on" && stateObj.state !== "playing") {
-      return device.color_off || "rgba(0, 0, 0, 0.2)";
+      return device.chip_off_color || DEFAULT_CHIP_OFF_COLOR;
     }
 
-    const onColor = device.color_on;
+    const onColor = device.chip_on_color;
 
     if (onColor === 'light-color' && entity.includes('light') && stateObj.attributes.rgb_color) {
       return `rgb(${stateObj.attributes.rgb_color.join(",")})`;
     }
 
-    return onColor || "#FDD835";
+    return onColor || DEFAULT_CHIP_ON_COLOR;
+  }
+
+  private getChipIconColor(device: DeviceConfig, entity: string): string {
+    if (!this.hass) return device.icon_unavailable_color || DEFAULT_ICON_UNAVAILABLE_COLOR;
+
+    const stateObj = this.hass.states[entity];
+
+    if (!stateObj || stateObj.state === 'unavailable') {
+      return device.icon_unavailable_color || DEFAULT_ICON_UNAVAILABLE_COLOR;
+    }
+
+    if (stateObj.state !== "on" && stateObj.state !== "playing") {
+      return device.icon_off_color || DEFAULT_ICON_OFF_COLOR;
+    }
+
+    return device.icon_on_color || DEFAULT_ICON_ON_COLOR;
   }
 
   private getSliderColor(device: DeviceConfig, entity: HassEntity | undefined): string {
-    const onColor = device.color_on;
+    const onColor = device.chip_on_color || device.color_on;
 
     if (onColor === 'light-color' && entity?.attributes?.rgb_color) {
       return `rgb(${entity.attributes.rgb_color.join(",")})`;
@@ -385,6 +451,8 @@ export class RoomCard extends LitElement {
 
     return onColor || "#2196F3";
   }
+
+// Continuation of room-card.ts
 
   private degreesToRadians(degrees: number): number {
     return degrees * Math.PI / 180;
@@ -416,73 +484,82 @@ export class RoomCard extends LitElement {
       return distToStart < distToEnd ? 0 : 1;
     }
 
-    const value = angleFromStart / this.totalAngle;
-    return Math.max(0, Math.min(1, value));
+    return angleFromStart / this.totalAngle;
   }
 
   private valueToAngle(value: number): number {
     return this.startAngle + (value * this.totalAngle);
   }
 
-  private pointToAngle(x: number, y: number, centerX: number, centerY: number): number {
-    const angle = Math.atan2(y - centerY, x - centerX);
-    return this.radiansToDegrees(angle);
-  }
+  private handlePointerDown(e: PointerEvent) {
+    e.preventDefault();
+    const svg = e.currentTarget as SVGElement;
+    if (!svg) return;
 
-  private snapToNearestMode(value: number): number {
-    if (this.currentDeviceIndex === -1) return value;
+    svg.setPointerCapture(e.pointerId);
 
-    const currentDevice = this.devices[this.currentDeviceIndex];
-    if (currentDevice.type !== "discrete" || !currentDevice.modes) return value;
+    const rect = svg.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const x = e.clientX - rect.left - centerX;
+    const y = e.clientY - rect.top - centerY;
 
-    const modes = currentDevice.modes;
-    let closestMode = modes[0];
-    let minDiff = Math.abs(value - modes[0].value);
+    const thumbAngle = this.valueToAngle(this.sliderValue);
+    const thumbAngleRad = this.degreesToRadians(thumbAngle);
+    const thumbX = 56 * Math.cos(thumbAngleRad);
+    const thumbY = 56 * Math.sin(thumbAngleRad);
 
-    for (let i = 1; i < modes.length; i++) {
-      const diff = Math.abs(value - modes[i].value);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestMode = modes[i];
-      }
+    const distanceToThumb = Math.sqrt((x - thumbX) ** 2 + (y - thumbY) ** 2);
+
+    if (distanceToThumb <= 20) {
+      this.thumbTapped = true;
     }
 
-    return closestMode.value;
-  }
-
-  private handlePointerDown(e: PointerEvent) {
-    const svg = e.currentTarget as SVGElement;
-    if (!svg || this.currentDeviceIndex === -1) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-
     this.isDragging = true;
-    this.actionTaken = true;
-    svg.setPointerCapture(e.pointerId);
     this.handlePointerMove(e);
   }
 
   private handlePointerMove(e: PointerEvent) {
-    if (!this.isDragging || !this.actionTaken) return;
+    if (!this.isDragging) return;
 
-    const svg = this.shadowRoot?.querySelector(".slider-svg") as SVGElement;
+    const svg = e.currentTarget as SVGElement;
     if (!svg) return;
 
     const rect = svg.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const x = e.clientX - rect.left - centerX;
+    const y = e.clientY - rect.top - centerY;
 
-    const angle = this.pointToAngle(e.clientX, e.clientY, centerX, centerY);
-    let newValue = this.angleToValue(angle);
+    let angle = this.radiansToDegrees(Math.atan2(y, x));
+    const newValue = this.angleToValue(angle);
+
+    if (!this.thumbTapped) {
+      this.sliderValue = newValue;
+      this.actionTaken = true;
+      this.requestUpdate();
+      return;
+    }
 
     const currentDevice = this.devices[this.currentDeviceIndex];
-    if (currentDevice && currentDevice.type === "discrete") {
-      newValue = this.snapToNearestMode(newValue);
+    if (currentDevice?.type === "discrete" && currentDevice.modes) {
+      const modes = currentDevice.modes;
+      let closestMode = modes[0];
+      let minDiff = Math.abs(newValue - modes[0].value);
+
+      for (let i = 1; i < modes.length; i++) {
+        const diff = Math.abs(newValue - modes[i].value);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestMode = modes[i];
+        }
+      }
+
       if (Math.abs(newValue - this.sliderValue) > 0.01) {
         this.vibrate();
       }
+
+      newValue = closestMode.value;
     } else {
       const valueDiff = Math.abs(newValue - this.sliderValue);
       if (valueDiff < 0.005 && newValue !== 0 && newValue !== 1) {
@@ -490,6 +567,7 @@ export class RoomCard extends LitElement {
       }
     }
 
+    this.actionTaken = true;
     this.sliderValue = newValue;
     this.requestUpdate();
   }
@@ -601,13 +679,14 @@ export class RoomCard extends LitElement {
     const backgroundColor = this.getBackgroundColor();
     const iconColor = this.getIconColor();
     const iconBackgroundColor = this.getIconBackgroundColor();
-    const tempHumidity = this.getTempHumidity();
+    const displayText = this.getDisplayText();
     const roomName = this.getAreaName();
 
-    const roomNameColor = this._config.room_name_color || '#000000';
+    // Use var(--primary-text-color) as default for all text
+    const roomNameColor = this._config.room_name_color || DEFAULT_FONT_COLOR;
     const roomNameSize = this._config.room_name_size || '14px';
-    const tempHumidityColor = this._config.temp_humidity_color || '#353535';
-    const tempHumiditySize = this._config.temp_humidity_size || '12px';
+    const displayEntityColor = this._config.display_entity_color || this._config.temp_humidity_color || DEFAULT_FONT_COLOR;
+    const displayEntitySize = this._config.display_entity_size || this._config.temp_humidity_size || '12px';
 
     const hasActiveDevice = this.currentDeviceIndex !== -1;
     const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
@@ -663,9 +742,9 @@ export class RoomCard extends LitElement {
             <div class="room-name" style="color: ${roomNameColor}; font-size: ${roomNameSize}">
               ${roomName}
             </div>
-            ${tempHumidity ? html`
-              <div class="temp-humidity" style="color: ${tempHumidityColor}; font-size: ${tempHumiditySize}">
-                ${tempHumidity}
+            ${displayText ? html`
+              <div class="display-entities" style="color: ${displayEntityColor}; font-size: ${displayEntitySize}">
+                ${displayText}
               </div>
             ` : ''}
           </div>
@@ -703,7 +782,7 @@ export class RoomCard extends LitElement {
                   />
                   <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
-                      <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_color || 'white'};"></ha-icon>
+                      <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_on_color || DEFAULT_ICON_ON_COLOR};"></ha-icon>
                     </div>
                   </foreignObject>
                 </svg>
@@ -723,15 +802,15 @@ export class RoomCard extends LitElement {
                 const isOn = entity && (entity.state === "on" || entity.state === "playing");
                 const isUnavailable = !entity || entity.state === 'unavailable';
                 const chipColor = this.getChipColor(device, controlEntity);
-                const iconColor = device.icon_color || (isOn ? 'white' : 'rgba(255, 255, 255, 0.6)');
+                const iconColor = this.getChipIconColor(device, controlEntity);
 
                 return html`
                   <div
                     class="chip ${isUnavailable ? 'unavailable' : ''} ${isOn ? 'on' : 'off'}"
-                    style="background-color: ${chipColor}; color: ${iconColor}"
+                    style="background-color: ${chipColor};"
                     @click=${() => this.handleChipClick(deviceIndex)}
                   >
-                    <ha-icon icon="${device.icon}"></ha-icon>
+                    <ha-icon icon="${device.icon}" style="color: ${iconColor};"></ha-icon>
                   </div>
                 `;
               })}
@@ -783,6 +862,11 @@ export class RoomCard extends LitElement {
         margin-top: 5px;
       }
 
+      .display-entities {
+        font-weight: 400;
+      }
+
+      /* For backwards compatibility */
       .temp-humidity {
         font-weight: 400;
       }
