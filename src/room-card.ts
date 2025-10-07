@@ -108,8 +108,13 @@ export class RoomCard extends LitElement {
   private getAreaName(): string {
     if (!this.hass || !this._config) return this._config?.area || '';
     if (this._config.name) return this._config.name;
-    const area = this.hass.areas[this._config.area];
-    return area?.name || this._config.area;
+    // Check if areas exist on hass object
+    const areas = (this.hass as any).areas;
+    if (areas && this._config.area) {
+      const area = areas[this._config.area];
+      return area?.name || this._config.area;
+    }
+    return this._config.area;
   }
 
   private updateCurrentDevice() {
@@ -442,7 +447,7 @@ export class RoomCard extends LitElement {
     return device.icon_on_color || DEFAULT_ICON_ON_COLOR;
   }
 
-  private getSliderColor(device: DeviceConfig, entity: HassEntity | undefined): string {
+  private getSliderColor(device: DeviceConfig, entity: HassEntity | undefined | null): string {
     const onColor = device.chip_on_color || device.color_on;
 
     if (onColor === 'light-color' && entity?.attributes?.rgb_color) {
@@ -451,8 +456,6 @@ export class RoomCard extends LitElement {
 
     return onColor || "#2196F3";
   }
-
-// Continuation of room-card.ts
 
   private degreesToRadians(degrees: number): number {
     return degrees * Math.PI / 180;
@@ -531,8 +534,8 @@ export class RoomCard extends LitElement {
     const x = e.clientX - rect.left - centerX;
     const y = e.clientY - rect.top - centerY;
 
-    const angle = this.radiansToDegrees(Math.atan2(y, x));
-    const newValue = this.angleToValue(angle);
+    let angle = this.radiansToDegrees(Math.atan2(y, x));
+    let newValue = this.angleToValue(angle);
 
     if (!this.thumbTapped) {
       this.sliderValue = newValue;

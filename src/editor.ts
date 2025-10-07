@@ -50,8 +50,13 @@ export class RoomCardEditor extends LitElement {
 
   private _getAreaName(areaId: string) {
     if (!this.hass || !areaId) return areaId;
-    const area = this.hass.areas[areaId];
-    return area?.name || areaId;
+    // Check if areas exist on hass object
+    const areas = (this.hass as any).areas;
+    if (areas) {
+      const area = areas[areaId];
+      return area?.name || areaId;
+    }
+    return areaId;
   }
 
   private _renderBasicSection() {
@@ -355,8 +360,6 @@ export class RoomCardEditor extends LitElement {
     `;
   }
 
-// Continuation of editor.ts - Devices Section
-
   private _renderDevicesSection() {
     const devices = this._config.devices || [];
 
@@ -651,7 +654,6 @@ export class RoomCardEditor extends LitElement {
     `;
   }
 
-  // Type change handlers
   private _handleBackgroundTypeChange(type: string) {
     if (!this._config) return;
 
@@ -716,7 +718,6 @@ export class RoomCardEditor extends LitElement {
     }
   }
 
-  // Color range methods
   private _renderColorRanges(configKey: string, ranges: any[]) {
     return html`
       <div class="color-ranges">
@@ -841,7 +842,6 @@ export class RoomCardEditor extends LitElement {
     });
   }
 
-  // Device management methods
   private _addDevice() {
     const devices = [...(this._config.devices || [])];
     devices.push({
@@ -897,7 +897,6 @@ export class RoomCardEditor extends LitElement {
     this._updateConfig({ devices });
   }
 
-  // Utility methods
   private _formatAttributeName(attr: string): string {
     return attr.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   }
@@ -990,8 +989,6 @@ export class RoomCardEditor extends LitElement {
 
     this._updateConfig({ devices });
   }
-
-// Final part of editor.ts - Styles
 
   static get styles() {
     return css`
