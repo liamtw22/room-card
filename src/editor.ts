@@ -60,8 +60,6 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _renderBasicSection() {
-    const areaName = this._getAreaName(this._config.area);
-    
     return html`
       <ha-expansion-panel
         .header=${'Basic Settings'}
@@ -69,10 +67,16 @@ export class RoomCardEditor extends LitElement {
         @expanded-changed=${(e: any) => this._expandedSections.basic = e.detail.expanded}
       >
         <div class="section-content">
-          <div class="info-row">
-            <span class="info-label">Area</span>
-            <span class="info-value">${areaName || 'Not set'}</span>
-          </div>
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ area: {} }}
+            .value=${this._config.area || ''}
+            .label=${'Area'}
+            @value-changed=${(e: CustomEvent) => this._valueChanged({
+              target: { configValue: 'area' },
+              detail: { value: e.detail.value }
+            } as any)}
+          ></ha-selector>
 
           <ha-textfield
             label="Room Name (Optional)"
