@@ -858,7 +858,6 @@ export class RoomCard extends LitElement {
         align-items: flex-start;
         margin-left: 15px;
         padding-top: 5px;
-        gap: 10px;
       }
 
       .room-name {
@@ -868,12 +867,6 @@ export class RoomCard extends LitElement {
 
       .display-entities {
         font-weight: 400;
-        margin-bottom: 10px;
-      }
-
-      /* For backwards compatibility */
-      .temp-humidity {
-        font-weight: 400;
       }
 
       .icon-section {
@@ -882,7 +875,7 @@ export class RoomCard extends LitElement {
         align-items: flex-end;
         justify-content: flex-start;
         position: relative;
-        padding-bottom: 10px;
+        padding-top: 20px;
       }
 
       .icon-container {
