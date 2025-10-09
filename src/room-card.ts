@@ -534,7 +534,7 @@ export class RoomCard extends LitElement {
     const x = e.clientX - rect.left - centerX;
     const y = e.clientY - rect.top - centerY;
 
-    let angle = this.radiansToDegrees(Math.atan2(y, x));
+    const angle = this.radiansToDegrees(Math.atan2(y, x));
     let newValue = this.angleToValue(angle);
 
     if (!this.thumbTapped) {
