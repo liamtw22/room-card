@@ -534,7 +534,7 @@ export class RoomCard extends LitElement {
     const x = e.clientX - rect.left - centerX;
     const y = e.clientY - rect.top - centerY;
 
-    const angle = this.radiansToDegrees(Math.atan2(y, x));
+    let angle = this.radiansToDegrees(Math.atan2(y, x));
     let newValue = this.angleToValue(angle);
 
     if (!this.thumbTapped) {
@@ -858,6 +858,7 @@ export class RoomCard extends LitElement {
         align-items: flex-start;
         margin-left: 15px;
         padding-top: 5px;
+        gap: 10px;
       }
 
       .room-name {
@@ -867,6 +868,7 @@ export class RoomCard extends LitElement {
 
       .display-entities {
         font-weight: 400;
+        margin-bottom: 10px;
       }
 
       /* For backwards compatibility */
@@ -877,10 +879,10 @@ export class RoomCard extends LitElement {
       .icon-section {
         grid-area: icon;
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         justify-content: flex-start;
         position: relative;
-        padding-top: 15px;
+        padding-bottom: 10px;
       }
 
       .icon-container {

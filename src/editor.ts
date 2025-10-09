@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant } from 'custom-card-helpers';
-import { DEFAULT_CHIP_ON_COLOR, DEFAULT_CHIP_OFF_COLOR, DEFAULT_CHIP_UNAVAILABLE_COLOR, DEFAULT_ICON_ON_COLOR, DEFAULT_ICON_OFF_COLOR, DEFAULT_ICON_UNAVAILABLE_COLOR } from './const';
+import { DEFAULT_CHIP_ON_COLOR, DEFAULT_CHIP_OFF_COLOR, DEFAULT_CHIP_UNAVAILABLE_COLOR, DEFAULT_ICON_ON_COLOR, DEFAULT_ICON_OFF_COLOR, DEFAULT_ICON_UNAVAILABLE_COLOR, HA_DOMAIN_COLORS, HA_DOMAIN_ICONS } from './const';
 
 @customElement('room-card-editor')
 export class RoomCardEditor extends LitElement {
@@ -10,9 +10,9 @@ export class RoomCardEditor extends LitElement {
   @state() private _expandedSections = {
     basic: true,
     appearance: false,
-    display_entities: false,
     devices: false
   };
+  @state() private _expandedDevices: { [key: number]: boolean } = {};
 
   private deviceDefaults: any = {
     light: { icon: 'mdi:lightbulb', color: '#FDD835', attribute: 'brightness' },
@@ -42,7 +42,6 @@ export class RoomCardEditor extends LitElement {
       <div class="card-config">
         ${this._renderBasicSection()}
         ${this._renderAppearanceSection()}
-        ${this._renderDisplayEntitiesSection()}
         ${this._renderDevicesSection()}
       </div>
     `;
@@ -50,7 +49,6 @@ export class RoomCardEditor extends LitElement {
 
   private _getAreaName(areaId: string) {
     if (!this.hass || !areaId) return areaId;
-    // Check if areas exist on hass object
     const areas = (this.hass as any).areas;
     if (areas) {
       const area = areas[areaId];
@@ -99,6 +97,73 @@ export class RoomCardEditor extends LitElement {
               .value=${this._config.room_name_size || '14px'}
               @input=${(e: any) => this._updateConfig({ room_name_size: e.target.value })}
               helper="CSS size (e.g., 14px, 1.2rem)"
+            ></ha-textfield>
+          </div>
+
+          <div class="subsection">
+            <label>Display Entities</label>
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ entity: {} }}
+              .value=${this._config.display_entity_1 || ''}
+              .label=${'Entity 1'}
+              @value-changed=${(e: CustomEvent) => this._valueChanged({
+                target: { configValue: 'display_entity_1' },
+                detail: { value: e.detail.value }
+              } as any)}
+            ></ha-selector>
+
+            <ha-textfield
+              label="Entity 1 Attribute (leave empty for state)"
+              .value=${this._config.display_entity_1_attribute || ''}
+              @input=${(e: any) => this._updateConfig({ display_entity_1_attribute: e.target.value })}
+              helper="Attribute name or leave empty for entity state"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Entity 1 Unit"
+              .value=${this._config.display_entity_1_unit || ''}
+              @input=${(e: any) => this._updateConfig({ display_entity_1_unit: e.target.value })}
+              helper="Unit to display (e.g., °F, °C, %)"
+            ></ha-textfield>
+
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ entity: {} }}
+              .value=${this._config.display_entity_2 || ''}
+              .label=${'Entity 2'}
+              @value-changed=${(e: CustomEvent) => this._valueChanged({
+                target: { configValue: 'display_entity_2' },
+                detail: { value: e.detail.value }
+              } as any)}
+            ></ha-selector>
+
+            <ha-textfield
+              label="Entity 2 Attribute (leave empty for state)"
+              .value=${this._config.display_entity_2_attribute || ''}
+              @input=${(e: any) => this._updateConfig({ display_entity_2_attribute: e.target.value })}
+              helper="Attribute name or leave empty for entity state"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Entity 2 Unit"
+              .value=${this._config.display_entity_2_unit || ''}
+              @input=${(e: any) => this._updateConfig({ display_entity_2_unit: e.target.value })}
+              helper="Unit to display (e.g., °F, °C, %)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Display Entities Color"
+              .value=${this._config.display_entity_color || 'var(--primary-text-color)'}
+              @input=${(e: any) => this._updateConfig({ display_entity_color: e.target.value })}
+              helper="CSS color"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Display Entities Font Size"
+              .value=${this._config.display_entity_size || '12px'}
+              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
+              helper="CSS size (e.g., 12px)"
             ></ha-textfield>
           </div>
 
@@ -164,7 +229,7 @@ export class RoomCardEditor extends LitElement {
                 @input=${(e: any) => {
                   this._updateConfig({ background: e.target.value });
                 }}
-                helper="CSS color or variable (e.g., #FFFFFF, var(--ha-card-background))"
+                helper="CSS color or variable"
                 placeholder="var(--ha-card-background)"
               ></ha-textfield>
             ` : html`
@@ -209,7 +274,7 @@ export class RoomCardEditor extends LitElement {
                 @input=${(e: any) => {
                   this._updateConfig({ icon_color: e.target.value });
                 }}
-                helper="Use CSS values like #FFFFFF, rgb(255,255,255), rgba(255,255,255,0.8)"
+                helper="Use CSS values"
               ></ha-textfield>
             ` : html`
               <ha-selector
@@ -253,7 +318,7 @@ export class RoomCardEditor extends LitElement {
                 @input=${(e: any) => {
                   this._updateConfig({ icon_background: e.target.value });
                 }}
-                helper="Use CSS values like #333333, rgb(51,51,51), rgba(255,255,255,0.2)"
+                helper="Use CSS values"
               ></ha-textfield>
             ` : html`
               <ha-selector
@@ -274,90 +339,6 @@ export class RoomCardEditor extends LitElement {
               ${this._config.icon_background?.entity ?
                 this._renderColorRanges('icon_background', this._config.icon_background?.ranges || []) : ''}
             `}
-          </div>
-        </div>
-      </ha-expansion-panel>
-    `;
-  }
-
-  private _renderDisplayEntitiesSection() {
-    return html`
-      <ha-expansion-panel
-        .header=${'Display Entities'}
-        .expanded=${this._expandedSections.display_entities}
-        @expanded-changed=${(e: any) => this._expandedSections.display_entities = e.detail.expanded}
-      >
-        <div class="section-content">
-          <div class="subsection">
-            <label>Entity 1</label>
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ entity: {} }}
-              .value=${this._config.display_entity_1 || ''}
-              .label=${'Entity 1'}
-              @value-changed=${(e: CustomEvent) => this._valueChanged({
-                target: { configValue: 'display_entity_1' },
-                detail: { value: e.detail.value }
-              } as any)}
-            ></ha-selector>
-
-            <ha-textfield
-              label="Attribute (leave empty for state)"
-              .value=${this._config.display_entity_1_attribute || ''}
-              @input=${(e: any) => this._updateConfig({ display_entity_1_attribute: e.target.value })}
-              helper="Attribute name (e.g., temperature, humidity) or leave empty for entity state"
-            ></ha-textfield>
-
-            <ha-textfield
-              label="Unit"
-              .value=${this._config.display_entity_1_unit || ''}
-              @input=${(e: any) => this._updateConfig({ display_entity_1_unit: e.target.value })}
-              helper="Unit to display (e.g., °F, °C, %)"
-            ></ha-textfield>
-          </div>
-
-          <div class="subsection">
-            <label>Entity 2</label>
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ entity: {} }}
-              .value=${this._config.display_entity_2 || ''}
-              .label=${'Entity 2'}
-              @value-changed=${(e: CustomEvent) => this._valueChanged({
-                target: { configValue: 'display_entity_2' },
-                detail: { value: e.detail.value }
-              } as any)}
-            ></ha-selector>
-
-            <ha-textfield
-              label="Attribute (leave empty for state)"
-              .value=${this._config.display_entity_2_attribute || ''}
-              @input=${(e: any) => this._updateConfig({ display_entity_2_attribute: e.target.value })}
-              helper="Attribute name (e.g., temperature, humidity) or leave empty for entity state"
-            ></ha-textfield>
-
-            <ha-textfield
-              label="Unit"
-              .value=${this._config.display_entity_2_unit || ''}
-              @input=${(e: any) => this._updateConfig({ display_entity_2_unit: e.target.value })}
-              helper="Unit to display (e.g., °F, °C, %)"
-            ></ha-textfield>
-          </div>
-
-          <div class="subsection">
-            <label>Display Entities Styling</label>
-            <ha-textfield
-              label="Display Entities Color"
-              .value=${this._config.display_entity_color || 'var(--primary-text-color)'}
-              @input=${(e: any) => this._updateConfig({ display_entity_color: e.target.value })}
-              helper="CSS color (e.g., #353535, rgb(53,53,53), var(--primary-text-color))"
-            ></ha-textfield>
-            <ha-textfield
-              label="Display Entities Font Size"
-              .value=${this._config.display_entity_size || '12px'}
-              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
-              helper="CSS size (e.g., 12px, 0.9rem)"
-            ></ha-textfield>
           </div>
         </div>
       </ha-expansion-panel>
@@ -406,212 +387,218 @@ export class RoomCardEditor extends LitElement {
   private _renderDeviceConfig(device: any, index: number) {
     const domain = device.entity ? device.entity.split('.')[0] : '';
     const isLightEntity = domain === 'light';
+    const hasEntity = device.entity && device.entity.length > 0;
+    const isExpanded = this._expandedDevices[index] !== false;
 
     return html`
-      <div class="device-config">
-        <div class="device-header">
-          <span>Device ${index + 1}</span>
-          <ha-icon-button
-            @click=${() => this._removeDevice(index)}
-            .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
-          ></ha-icon-button>
-        </div>
+      <ha-expansion-panel
+        .header=${`Device ${index + 1}${device.entity ? ': ' + device.entity.split('.')[1] : ''}`}
+        .expanded=${isExpanded}
+        @expanded-changed=${(e: any) => {
+          this._expandedDevices = { ...this._expandedDevices, [index]: e.detail.expanded };
+          this.requestUpdate();
+        }}
+      >
+        <div class="device-config">
+          <div class="device-header">
+            <ha-icon-button
+              @click=${() => this._removeDevice(index)}
+              .path=${'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'}
+              title="Remove Device"
+            ></ha-icon-button>
+          </div>
 
-        <ha-selector
-          .hass=${this.hass}
-          .selector=${{ entity: {} }}
-          .value=${device.entity}
-          .label=${'Entity'}
-          @value-changed=${(e: CustomEvent) => this._handleDeviceChange({
-            target: { configValue: 'entity' },
-            detail: { value: e.detail.value }
-          } as any, index)}
-        ></ha-selector>
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ entity: {} }}
+            .value=${device.entity || ''}
+            .label=${'Entity'}
+            @value-changed=${(e: CustomEvent) => this._handleDeviceChange({
+              target: { configValue: 'entity' },
+              detail: { value: e.detail.value }
+            } as any, index)}
+          ></ha-selector>
 
-        <ha-selector
-          .hass=${this.hass}
-          .selector=${{ entity: {} }}
-          .value=${device.control_entity || ''}
-          .label=${'Control Entity (Optional)'}
-          @value-changed=${(e: CustomEvent) => this._handleDeviceChange({
-            target: { configValue: 'control_entity' },
-            detail: { value: e.detail.value }
-          } as any, index)}
-        ></ha-selector>
-
-        <ha-textfield
-          label="Name (Optional)"
-          .value=${device.name || ''}
-          @input=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'name' },
-            detail: { value: e.target.value }
-          } as any, index)}
-        ></ha-textfield>
-
-        <ha-selector
-          .hass=${this.hass}
-          .selector=${{ icon: {} }}
-          .value=${device.icon || 'mdi:lightbulb'}
-          .label=${'Icon'}
-          @value-changed=${(e: CustomEvent) => this._handleDeviceChange({
-            target: { configValue: 'icon' },
-            detail: { value: e.detail.value }
-          } as any, index)}
-        ></ha-selector>
-
-        <ha-select
-          naturalMenuWidth
-          fixedMenuPosition
-          label="Control Type"
-          .value=${device.type || 'continuous'}
-          @selected=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'type' },
-            detail: { value: e.target.value }
-          } as any, index)}
-          @closed=${(e: Event) => e.stopPropagation()}
-        >
-          <ha-list-item value="continuous">Continuous</ha-list-item>
-          <ha-list-item value="discrete">Discrete</ha-list-item>
-        </ha-select>
-
-        <ha-select
-          naturalMenuWidth
-          fixedMenuPosition
-          label="Attribute"
-          .value=${device.attribute || 'brightness'}
-          @selected=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'attribute' },
-            detail: { value: e.target.value }
-          } as any, index)}
-          @closed=${(e: Event) => e.stopPropagation()}
-        >
-          ${this._getEntityAttributes(device.entity).map((attr: string) => html`
-            <ha-list-item value="${attr}">${this._formatAttributeName(attr)}</ha-list-item>
-          `)}
-        </ha-select>
-
-        <ha-textfield
-          label="Scale"
-          type="number"
-          .value=${device.scale || 1}
-          @input=${(e: any) => this._handleDeviceChange({
-            target: { configValue: 'scale' },
-            detail: { value: parseFloat(e.target.value) }
-          } as any, index)}
-          helper="Value multiplier (e.g., 2.55 for brightness 0-255)"
-        ></ha-textfield>
-
-        ${device.type === 'discrete' ? this._renderDeviceModes(device, index) : ''}
-
-        <div class="device-toggles">
-          <ha-formfield label="Show Chip">
-            <ha-switch
-              .checked=${device.show_chip !== false}
-              @change=${(e: any) => this._handleDeviceChange({
-                target: { configValue: 'show_chip' },
-                detail: { value: e.target.checked }
+          ${hasEntity ? html`
+            <ha-textfield
+              label="Name (Optional)"
+              .value=${device.name || ''}
+              @input=${(e: any) => this._handleDeviceChange({
+                target: { configValue: 'name' },
+                detail: { value: e.target.value }
               } as any, index)}
-            ></ha-switch>
-          </ha-formfield>
+            ></ha-textfield>
 
-          <ha-formfield label="Show Slider">
-            <ha-switch
-              .checked=${device.show_slider !== false}
-              @change=${(e: any) => this._handleDeviceChange({
-                target: { configValue: 'show_slider' },
-                detail: { value: e.target.checked }
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ icon: {} }}
+              .value=${device.icon || 'mdi:lightbulb'}
+              .label=${'Icon'}
+              @value-changed=${(e: CustomEvent) => this._handleDeviceChange({
+                target: { configValue: 'icon' },
+                detail: { value: e.detail.value }
               } as any, index)}
-            ></ha-switch>
-          </ha-formfield>
+            ></ha-selector>
+
+            <ha-select
+              naturalMenuWidth
+              fixedMenuPosition
+              label="Control Type"
+              .value=${device.type || 'continuous'}
+              @selected=${(e: any) => this._handleDeviceChange({
+                target: { configValue: 'type' },
+                detail: { value: e.target.value }
+              } as any, index)}
+              @closed=${(e: Event) => e.stopPropagation()}
+            >
+              <ha-list-item value="continuous">Continuous</ha-list-item>
+              <ha-list-item value="discrete">Discrete</ha-list-item>
+            </ha-select>
+
+            <ha-select
+              naturalMenuWidth
+              fixedMenuPosition
+              label="Attribute"
+              .value=${device.attribute || 'brightness'}
+              @selected=${(e: any) => this._handleDeviceChange({
+                target: { configValue: 'attribute' },
+                detail: { value: e.target.value }
+              } as any, index)}
+              @closed=${(e: Event) => e.stopPropagation()}
+            >
+              ${this._getEntityAttributes(device.entity).map((attr: string) => html`
+                <ha-list-item value="${attr}">${this._formatAttributeName(attr)}</ha-list-item>
+              `)}
+            </ha-select>
+
+            <ha-textfield
+              label="Scale"
+              type="number"
+              .value=${device.scale || 1}
+              @input=${(e: any) => this._handleDeviceChange({
+                target: { configValue: 'scale' },
+                detail: { value: parseFloat(e.target.value) }
+              } as any, index)}
+              helper="Value multiplier (e.g., 2.55 for brightness 0-255)"
+            ></ha-textfield>
+
+            ${device.type === 'discrete' ? this._renderDeviceModes(device, index) : ''}
+
+            <div class="device-toggles">
+              <ha-formfield label="Show Chip">
+                <ha-switch
+                  .checked=${device.show_chip !== false}
+                  @change=${(e: any) => this._handleDeviceChange({
+                    target: { configValue: 'show_chip' },
+                    detail: { value: e.target.checked }
+                  } as any, index)}
+                ></ha-switch>
+              </ha-formfield>
+
+              <ha-formfield label="Show Slider">
+                <ha-switch
+                  .checked=${device.show_slider !== false}
+                  @change=${(e: any) => this._handleDeviceChange({
+                    target: { configValue: 'show_slider' },
+                    detail: { value: e.target.checked }
+                  } as any, index)}
+                ></ha-switch>
+              </ha-formfield>
+            </div>
+
+            <ha-textfield
+              label="Chip Column"
+              type="number"
+              min="1"
+              max="${this._config.chip_columns || 1}"
+              .value=${device.chip_column || 1}
+              @input=${(e: any) => {
+                const value = parseInt(e.target.value);
+                const maxColumns = this._config.chip_columns || 1;
+                if (value >= 1 && value <= maxColumns) {
+                  this._handleDeviceChange({
+                    target: { configValue: 'chip_column' },
+                    detail: { value: value }
+                  } as any, index);
+                }
+              }}
+              helper="Which column to place this chip in"
+            ></ha-textfield>
+
+            <div class="device-colors">
+              <label>Chip State Colors</label>
+              
+              <ha-textfield
+                label="Chip On Color"
+                .value=${device.chip_on_color || device.color_on || (isLightEntity ? 'light-color' : DEFAULT_CHIP_ON_COLOR)}
+                @input=${(e: any) => this._handleDeviceChange({
+                  target: { configValue: 'chip_on_color' },
+                  detail: { value: e.target.value }
+                } as any, index)}
+                helper="${isLightEntity ? 'Use "light-color" to match light RGB' : 'Chip background when on'}"
+              ></ha-textfield>
+
+              <ha-textfield
+                label="Chip Off Color"
+                .value=${device.chip_off_color || device.color_off || DEFAULT_CHIP_OFF_COLOR}
+                @input=${(e: any) => this._handleDeviceChange({
+                  target: { configValue: 'chip_off_color' },
+                  detail: { value: e.target.value }
+                } as any, index)}
+                helper="Chip background when off"
+              ></ha-textfield>
+
+              <ha-textfield
+                label="Chip Unavailable Color"
+                .value=${device.chip_unavailable_color || device.color_unavailable || DEFAULT_CHIP_UNAVAILABLE_COLOR}
+                @input=${(e: any) => this._handleDeviceChange({
+                  target: { configValue: 'chip_unavailable_color' },
+                  detail: { value: e.target.value }
+                } as any, index)}
+                helper="Chip background when unavailable"
+              ></ha-textfield>
+            </div>
+
+            <div class="device-colors">
+              <label>Icon State Colors</label>
+              
+              <ha-textfield
+                label="Icon On Color"
+                .value=${device.icon_on_color || device.icon_color || DEFAULT_ICON_ON_COLOR}
+                @input=${(e: any) => this._handleDeviceChange({
+                  target: { configValue: 'icon_on_color' },
+                  detail: { value: e.target.value }
+                } as any, index)}
+                helper="Icon color when on"
+              ></ha-textfield>
+
+              <ha-textfield
+                label="Icon Off Color"
+                .value=${device.icon_off_color || DEFAULT_ICON_OFF_COLOR}
+                @input=${(e: any) => this._handleDeviceChange({
+                  target: { configValue: 'icon_off_color' },
+                  detail: { value: e.target.value }
+                } as any, index)}
+                helper="Icon color when off"
+              ></ha-textfield>
+
+              <ha-textfield
+                label="Icon Unavailable Color"
+                .value=${device.icon_unavailable_color || DEFAULT_ICON_UNAVAILABLE_COLOR}
+                @input=${(e: any) => this._handleDeviceChange({
+                  target: { configValue: 'icon_unavailable_color' },
+                  detail: { value: e.target.value }
+                } as any, index)}
+                helper="Icon color when unavailable"
+              ></ha-textfield>
+            </div>
+          ` : html`
+            <div class="info-message">
+              Select an entity to configure device settings
+            </div>
+          `}
         </div>
-
-        <ha-textfield
-          label="Chip Column"
-          type="number"
-          min="1"
-          max="${this._config.chip_columns || 1}"
-          .value=${device.chip_column || 1}
-          @input=${(e: any) => {
-            const value = parseInt(e.target.value);
-            const maxColumns = this._config.chip_columns || 1;
-            if (value >= 1 && value <= maxColumns) {
-              this._handleDeviceChange({
-                target: { configValue: 'chip_column' },
-                detail: { value: value }
-              } as any, index);
-            }
-          }}
-          helper="Which column to place this chip in (1-${this._config.chip_columns || 1})"
-        ></ha-textfield>
-
-        <div class="device-colors">
-          <label>Chip State Colors</label>
-          
-          <ha-textfield
-            label="Chip On Color (hex, rgb, rgba)"
-            .value=${device.chip_on_color || device.color_on || (isLightEntity ? 'light-color' : DEFAULT_CHIP_ON_COLOR)}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'chip_on_color' },
-              detail: { value: e.target.value }
-            } as any, index)}
-            helper="${isLightEntity ? 'Use "light-color" to match light RGB' : 'Chip background when device is on'}"
-          ></ha-textfield>
-
-          <ha-textfield
-            label="Chip Off Color (hex, rgb, rgba)"
-            .value=${device.chip_off_color || device.color_off || DEFAULT_CHIP_OFF_COLOR}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'chip_off_color' },
-              detail: { value: e.target.value }
-            } as any, index)}
-            helper="Chip background when device is off"
-          ></ha-textfield>
-
-          <ha-textfield
-            label="Chip Unavailable Color (hex, rgb, rgba)"
-            .value=${device.chip_unavailable_color || device.color_unavailable || DEFAULT_CHIP_UNAVAILABLE_COLOR}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'chip_unavailable_color' },
-              detail: { value: e.target.value }
-            } as any, index)}
-            helper="Chip background when device is unavailable"
-          ></ha-textfield>
-        </div>
-
-        <div class="device-colors">
-          <label>Icon State Colors</label>
-          
-          <ha-textfield
-            label="Icon On Color (hex, rgb, rgba)"
-            .value=${device.icon_on_color || device.icon_color || DEFAULT_ICON_ON_COLOR}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'icon_on_color' },
-              detail: { value: e.target.value }
-            } as any, index)}
-            helper="Icon color when device is on"
-          ></ha-textfield>
-
-          <ha-textfield
-            label="Icon Off Color (hex, rgb, rgba)"
-            .value=${device.icon_off_color || DEFAULT_ICON_OFF_COLOR}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'icon_off_color' },
-              detail: { value: e.target.value }
-            } as any, index)}
-            helper="Icon color when device is off"
-          ></ha-textfield>
-
-          <ha-textfield
-            label="Icon Unavailable Color (hex, rgb, rgba)"
-            .value=${device.icon_unavailable_color || DEFAULT_ICON_UNAVAILABLE_COLOR}
-            @input=${(e: any) => this._handleDeviceChange({
-              target: { configValue: 'icon_unavailable_color' },
-              detail: { value: e.target.value }
-            } as any, index)}
-            helper="Icon color when device is unavailable"
-          ></ha-textfield>
-        </div>
-      </div>
+      </ha-expansion-panel>
     `;
   }
 
@@ -850,9 +837,9 @@ export class RoomCardEditor extends LitElement {
     const devices = [...(this._config.devices || [])];
     devices.push({
       entity: '',
-      icon: 'mdi:lightbulb',
+      icon: '',
       attribute: 'brightness',
-      scale: 2.55,
+      scale: 1,
       type: 'continuous',
       show_chip: true,
       show_slider: true,
@@ -865,12 +852,20 @@ export class RoomCardEditor extends LitElement {
       icon_unavailable_color: DEFAULT_ICON_UNAVAILABLE_COLOR
     });
     this._updateConfig({ devices });
+    // Expand the newly added device
+    this._expandedDevices = { ...this._expandedDevices, [devices.length - 1]: true };
+    this.requestUpdate();
   }
 
   private _removeDevice(index: number) {
     const devices = [...(this._config.devices || [])];
     devices.splice(index, 1);
     this._updateConfig({ devices });
+    // Remove from expanded state
+    const newExpanded = { ...this._expandedDevices };
+    delete newExpanded[index];
+    this._expandedDevices = newExpanded;
+    this.requestUpdate();
   }
 
   private _addMode(deviceIndex: number) {
@@ -973,20 +968,39 @@ export class RoomCardEditor extends LitElement {
 
     if (configValue === 'entity' && value) {
       const domain = value.split('.')[0];
-      const defaults = this.deviceDefaults[domain];
-
-      if (defaults && !devices[index].icon) {
-        devices[index] = {
-          ...devices[index],
-          entity: value,
-          icon: defaults.icon,
-          attribute: defaults.attribute,
-          scale: domain === 'light' ? 2.55 : 1,
-          chip_on_color: defaults.color
-        };
-      } else {
-        devices[index] = { ...devices[index], [configValue]: value };
+      
+      // Get HA default icon for domain
+      const haIcon = HA_DOMAIN_ICONS[domain];
+      // Get HA default color for domain
+      const haColor = HA_DOMAIN_COLORS[domain] || DEFAULT_CHIP_ON_COLOR;
+      
+      // Determine default attribute based on domain
+      let defaultAttr = 'state';
+      let defaultScale = 1;
+      
+      if (domain === 'light') {
+        defaultAttr = 'brightness';
+        defaultScale = 2.55;
+      } else if (domain === 'media_player') {
+        defaultAttr = 'volume_level';
+      } else if (domain === 'fan') {
+        defaultAttr = 'percentage';
+      } else if (domain === 'climate') {
+        defaultAttr = 'temperature';
+      } else if (domain === 'cover') {
+        defaultAttr = 'position';
+      } else if (domain === 'vacuum') {
+        defaultAttr = 'battery_level';
       }
+
+      devices[index] = {
+        ...devices[index],
+        entity: value,
+        icon: haIcon || devices[index].icon || 'mdi:lightbulb',
+        attribute: defaultAttr,
+        scale: defaultScale,
+        chip_on_color: haColor
+      };
     } else {
       devices[index] = { ...devices[index], [configValue]: value };
     }
@@ -1041,6 +1055,15 @@ export class RoomCardEditor extends LitElement {
         font-weight: 600;
       }
 
+      .info-message {
+        padding: 12px;
+        background: var(--secondary-background-color);
+        border-radius: 4px;
+        text-align: center;
+        color: var(--secondary-text-color);
+        font-style: italic;
+      }
+
       ha-formfield {
         display: flex;
         align-items: center;
@@ -1073,8 +1096,6 @@ export class RoomCardEditor extends LitElement {
 
       .device-config {
         padding: 12px;
-        border: 1px solid var(--divider-color);
-        border-radius: 8px;
         display: flex;
         flex-direction: column;
         gap: 12px;
@@ -1083,8 +1104,7 @@ export class RoomCardEditor extends LitElement {
       .device-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        font-weight: 500;
+        justify-content: flex-end;
         margin-bottom: 8px;
       }
 
