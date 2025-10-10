@@ -830,173 +830,175 @@ export class RoomCard extends LitElement {
 
   static get styles(): CSSResultGroup {
     return css`
-      :host {
-        display: block;
-      }
+        :host {
+          display: block;
+          height: 182px;
+        }
 
-      .card-container {
-        height: 100%;
-        border-radius: 22px;
-        display: grid;
-        grid-template-areas:
-          "title chips"
-          "icon chips";
-        grid-template-rows: min-content 1fr;
-        grid-template-columns: 1fr min-content;
-        position: relative;
-        transition: background-color 0.3s ease;
-        cursor: pointer;
-        user-select: none;
-        -webkit-user-select: none;
-        overflow: hidden;
-      }
+        .card-container {
+          height: 100%;
+          border-radius: 22px;
+          display: grid;
+          grid-template-areas:
+            "title chips"
+            "icon chips";
+          grid-template-rows: min-content 1fr;
+          grid-template-columns: 1fr min-content;
+          position: relative;
+          transition: background-color 0.3s ease;
+          background-color: ${backgroundColor};
+          cursor: pointer;
+          user-select: none;
+          -webkit-user-select: none;
+        }
 
-      .title-section {
-        grid-area: title;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        margin-left: 15px;
-        padding-top: 5px;
-      }
+        .title-section {
+          grid-area: title;
+          font-size: 14px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          margin-left: 15px;
+          padding-top: 5px;
+        }
 
-      .room-name {
-        font-weight: 500;
-        margin-top: 5px;
-      }
+        .room-name {
+          font-weight: 500;
+          color: ${isMainOn ? '#000000' : '#353535'};
+          margin-top: 5px;
+        }
 
-      .display-entities {
-        font-weight: 400;
-      }
+        .temp-humidity {
+          font-size: 12px;
+          color: #353535;
+          font-weight: 400;
+        }
 
-      .icon-section {
-        grid-area: icon;
-        display: flex;
-        align-items: flex-end;
-        justify-content: flex-start;
-        position: relative;
-        padding-top: 20px;
-      }
+        .icon-section {
+          grid-area: icon;
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          position: relative;
+          padding-top: 37px;
+          overflow: hidden;
+        }
 
-      .icon-container {
-        position: relative;
-        width: 110px;
-        height: 110px;
-        margin-left: -10px;
-        margin-bottom: -10px;
-        cursor: pointer;
-      }
+        .icon-container {
+          position: relative;
+          width: 110px;
+          height: 110px;
+          margin-left: -10px;
+        }
 
-      .icon-background {
-        position: absolute;
-        width: 110px;
-        height: 110px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.3s ease;
-        z-index: 1;
-        background-color: rgba(255, 255, 255, 0.2);
-      }
+        .icon-background {
+          position: absolute;
+          width: 110px;
+          height: 110px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          z-index: 1;
+          background-color: ${isMainOn ? 'rgba(255, 255, 255, 0.2)' : 'rgba(122, 122, 127, 0.2)'};
+        }
 
-      .icon-background ha-icon {
-        --mdc-icon-size: 75px;
-        color: white;
-        transition: all 0.3s ease;
-      }
+        .icon-background ha-icon {
+          --mdc-icon-size: 75px;
+          color: ${isMainOn ? 'white' : '#7A7A7F'};
+          transition: all 0.3s ease;
+        }
 
-      .slider-container {
-        position: absolute;
-        width: 150px;
-        height: 150px;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 2;
-      }
+        .slider-container {
+          position: absolute;
+          width: 150px;
+          height: 150px;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+          z-index: 2;
+        }
 
-      .slider-svg {
-        width: 100%;
-        height: 100%;
-        touch-action: none;
-        cursor: pointer;
-        -webkit-tap-highlight-color: transparent;
-      }
+        .slider-svg {
+          width: 100%;
+          height: 100%;
+          touch-action: none;
+          cursor: ${isDeviceOn ? 'pointer' : 'default'};
+          -webkit-tap-highlight-color: transparent;
+          pointer-events: none;
+        }
 
-      .slider-track {
-        fill: none;
-        stroke: rgb(187, 187, 187);
-        stroke-width: 12;
-        pointer-events: stroke;
-      }
+        .slider-track {
+          fill: none;
+          stroke: rgb(187, 187, 187);
+          stroke-width: 12;
+          pointer-events: ${isDeviceOn ? 'stroke' : 'none'};
+        }
 
-      .slider-progress {
-        fill: none;
-        stroke-width: 12;
-        stroke-linecap: round;
-        transition: d 0.3s ease;
-        pointer-events: stroke;
-      }
+        .slider-progress {
+          fill: none;
+          stroke: ${currentDevice ? currentDevice.color : '#2196F3'};
+          stroke-width: 12;
+          stroke-linecap: round;
+          transition: ${currentDevice && currentDevice.type === "discrete" ? 'd 0.3s ease' : 'stroke 0.2s ease'};
+          pointer-events: ${isDeviceOn ? 'stroke' : 'none'};
+        }
 
-      .slider-thumb {
-        transition: all 0.2s ease;
-        cursor: pointer;
-        pointer-events: auto;
-      }
+        .slider-thumb {
+          fill: ${currentDevice ? currentDevice.color : '#2196F3'};
+          transition: ${currentDevice && currentDevice.type === "discrete" ? 'all 0.3s ease' : 'r 0.2s ease, filter 0.2s ease'};
+          cursor: pointer;
+          pointer-events: ${isDeviceOn ? 'auto' : 'none'};
+        }
 
-      .slider-thumb.dragging {
-        r: 20;
-      }
+        .slider-thumb.dragging {
+          r: 20;
+        }
 
-      .slider-thumb-icon {
-        pointer-events: none;
-      }
+        .slider-thumb-icon {
+          pointer-events: none;
+        }
 
-      .chips-section {
-        grid-area: chips;
-        display: flex;
-        flex-direction: row;
-        gap: 4px;
-        margin-right: 8px;
-        margin-top: 8px;
-        margin-bottom: 8px;
-      }
-        
-      .chips-column {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
+        .chips-section {
+          grid-area: chips;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-right: 8px;
+          margin-top: 8px;
+        }
 
-      .chip {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 40px;
-        width: 40px;
-        border-radius: 50%;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        position: relative;
-      }
+        .chip {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 40px;
+          width: 40px;
+          border-radius: 50%;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          position: relative;
+        }
 
-      .chip:active {
-        transform: scale(0.95);
-      }
+        .chip:active {
+          transform: scale(0.95);
+        }
 
-      .chip ha-icon {
-        --mdc-icon-size: 25px;
-      }
+        .chip ha-icon {
+          --mdc-icon-size: 25px;
+        }
 
-      .unavailable {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
+        .unavailable {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
 
-      .unavailable:active {
-        transform: none;
-      }
+        .unavailable:active {
+          transform: none;
+        }
     `;
   }
 }
