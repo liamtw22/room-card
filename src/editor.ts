@@ -101,7 +101,7 @@ export class RoomCardEditor extends LitElement {
           </div>
 
           <div class="subsection">
-            <label>Display Entities</label>
+            <label>Subtitle Entities</label>
             <ha-selector
               .hass=${this.hass}
               .selector=${{ entity: {} }}
@@ -153,14 +153,14 @@ export class RoomCardEditor extends LitElement {
             ></ha-textfield>
 
             <ha-textfield
-              label="Display Entities Color"
+              label="Subtitle Entities Color"
               .value=${this._config.display_entity_color || 'var(--primary-text-color)'}
               @input=${(e: any) => this._updateConfig({ display_entity_color: e.target.value })}
               helper="CSS color"
             ></ha-textfield>
 
             <ha-textfield
-              label="Display Entities Font Size"
+              label="Subtitle Entities Font Size"
               .value=${this._config.display_entity_size || '12px'}
               @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
               helper="CSS size (e.g., 12px)"
