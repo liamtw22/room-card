@@ -739,7 +739,11 @@ export class RoomCard extends LitElement {
     });
 
     return html`
-      <div class="card-container" style="background-color: ${backgroundColor}">
+      <div 
+        class="card-container" 
+        style="background-color: ${backgroundColor};"
+        @click=${this.handleCardClick}
+      >
         <div class="main-content">
           <div class="title-section">
             <div class="room-name" style="color: ${roomNameColor}; font-size: ${roomNameSize}">
@@ -755,7 +759,6 @@ export class RoomCard extends LitElement {
           <div class="icon-section">
             <div class="icon-container">
               <div class="icon-background" 
-                  style="background-color: ${iconBackgroundColor}"
                   @click=${this.handleIconClick}>
                 <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
               </div>
