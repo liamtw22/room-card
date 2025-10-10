@@ -902,12 +902,12 @@ export class RoomCard extends LitElement {
           cursor: pointer;
           transition: all 0.3s ease;
           z-index: 1;
-          background-color: ${isMainOn ? 'rgba(255, 255, 255, 0.2)' : 'rgba(122, 122, 127, 0.2)'};
+          background-color: ${isMainOn ? 'rgba(53, 53, 53, 1)' : 'rgba(53, 53, 53, 1)'};
         }
 
         .icon-background ha-icon {
           --mdc-icon-size: 75px;
-          color: ${isMainOn ? 'white' : '#7A7A7F'};
+          color: ${isMainOn ? 'white' : 'rgba(219, 219, 219, 1)'};
           transition: all 0.3s ease;
         }
 
