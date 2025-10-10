@@ -334,6 +334,23 @@ export class RoomCard extends LitElement {
     }
   }
 
+  private handleCardClick(e: MouseEvent) {
+    // Only navigate if clicking the card directly, not any interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('.icon-background') || target.closest('.chip') || target.closest('.slider-svg')) {
+      return;
+    }
+    
+    if (this._config.area && !this.isDragging) {
+      const event = new Event('location-changed', {
+        bubbles: true,
+        composed: true,
+      });
+      window.history.pushState(null, '', `/config/areas/area/${this._config.area}`);
+      window.dispatchEvent(event);
+    }
+  }
+
   private handleIconClick() {
     if (!this.hass || this.isDragging) return;
 
@@ -604,68 +621,40 @@ export class RoomCard extends LitElement {
     if (currentDevice.type === "discrete" && currentDevice.modes) {
       const modes = currentDevice.modes;
       let selectedMode = modes[0];
+      let minDiff = Math.abs(value - modes[0].value);
 
-      for (const mode of modes) {
-        if (Math.abs(value - mode.value) < 0.01) {
-          selectedMode = mode;
-          break;
+      for (let i = 1; i < modes.length; i++) {
+        const diff = Math.abs(value - modes[i].value);
+        if (diff < minDiff) {
+          minDiff = diff;
+          selectedMode = modes[i];
         }
       }
 
-      if (selectedMode.percentage === 0) {
-        this.hass.callService(domain, "turn_off", {
-          entity_id: controlEntity
-        });
-      } else {
-        this.hass.callService(domain, "set_percentage", {
+      if (domain === "fan" || domain === "climate") {
+        this.hass.callService(domain, "set_preset_mode", {
           entity_id: controlEntity,
-          percentage: selectedMode.percentage
+          preset_mode: selectedMode.label,
         });
       }
     } else {
-      const actualValue = Math.round(value * (currentDevice.scale || 100));
-      const attribute = currentDevice.attribute || 'brightness';
-
-      if (attribute === "brightness") {
-        if (actualValue === 0) {
-          this.hass.callService(domain, "turn_off", {
-            entity_id: controlEntity
-          });
-        } else {
-          this.hass.callService(domain, "turn_on", {
-            entity_id: controlEntity,
-            brightness: actualValue,
-          });
-        }
-      } else if (attribute === "volume_level") {
-        if (value === 0) {
-          this.hass.callService(domain, "volume_mute", {
-            entity_id: controlEntity,
-            is_volume_muted: true
-          });
-        } else {
-          this.hass.callService(domain, "volume_set", {
-            entity_id: controlEntity,
-            volume_level: value,
-          });
-        }
-      } else if (attribute === "temperature") {
-        this.hass.callService(domain, "set_temperature", {
+      const actualValue = Math.round(value * (currentDevice.scale || 255));
+      if (domain === "light") {
+        this.hass.callService(domain, "turn_on", {
           entity_id: controlEntity,
-          temperature: actualValue,
+          brightness: actualValue,
         });
-      } else if (attribute === "percentage") {
-        if (actualValue === 0) {
-          this.hass.callService(domain, "turn_off", {
-            entity_id: controlEntity
-          });
-        } else {
-          this.hass.callService(domain, "set_percentage", {
-            entity_id: controlEntity,
-            percentage: actualValue,
-          });
-        }
-      } else if (attribute === "position") {
+      } else if (domain === "media_player") {
+        this.hass.callService(domain, "volume_set", {
+          entity_id: controlEntity,
+          volume_level: value,
+        });
+      } else if (domain === "fan") {
+        this.hass.callService(domain, "set_percentage", {
+          entity_id: controlEntity,
+          percentage: actualValue,
+        });
+      } else if (domain === "cover") {
         this.hass.callService(domain, "set_cover_position", {
           entity_id: controlEntity,
           position: actualValue,
@@ -759,7 +748,8 @@ export class RoomCard extends LitElement {
           <div class="icon-section">
             <div class="icon-container">
               <div class="icon-background" 
-                  @click=${this.handleIconClick}>
+                   style="background-color: ${iconBackgroundColor};"
+                   @click=${this.handleIconClick}>
                 <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
               </div>
               
@@ -849,10 +839,15 @@ export class RoomCard extends LitElement {
           grid-template-columns: 1fr min-content;
           position: relative;
           transition: background-color 0.3s ease;
-          background-color: ${backgroundColor};
           cursor: pointer;
           user-select: none;
           -webkit-user-select: none;
+        }
+
+        .main-content {
+          grid-column: 1;
+          grid-row: 1 / -1;
+          display: contents;
         }
 
         .title-section {
@@ -867,14 +862,13 @@ export class RoomCard extends LitElement {
 
         .room-name {
           font-weight: 500;
-          color: ${isMainOn ? '#000000' : '#353535'};
           margin-top: 5px;
         }
 
-        .temp-humidity {
+        .display-entities {
           font-size: 12px;
-          color: #353535;
           font-weight: 400;
+          margin-top: 2px;
         }
 
         .icon-section {
@@ -905,12 +899,10 @@ export class RoomCard extends LitElement {
           cursor: pointer;
           transition: all 0.3s ease;
           z-index: 1;
-          background-color: ${isMainOn ? 'rgba(53, 53, 53, 1)' : 'rgba(53, 53, 53, 1)'};
         }
 
         .icon-background ha-icon {
           --mdc-icon-size: 75px;
-          color: ${isMainOn ? 'white' : 'rgba(219, 219, 219, 1)'};
           transition: all 0.3s ease;
         }
 
@@ -929,32 +921,29 @@ export class RoomCard extends LitElement {
           width: 100%;
           height: 100%;
           touch-action: none;
-          cursor: ${isDeviceOn ? 'pointer' : 'default'};
           -webkit-tap-highlight-color: transparent;
-          pointer-events: none;
+          pointer-events: auto;
         }
 
         .slider-track {
           fill: none;
           stroke: rgb(187, 187, 187);
           stroke-width: 12;
-          pointer-events: ${isDeviceOn ? 'stroke' : 'none'};
+          pointer-events: stroke;
         }
 
         .slider-progress {
           fill: none;
-          stroke: ${currentDevice ? currentDevice.color : '#2196F3'};
           stroke-width: 12;
           stroke-linecap: round;
-          transition: ${currentDevice && currentDevice.type === "discrete" ? 'd 0.3s ease' : 'stroke 0.2s ease'};
-          pointer-events: ${isDeviceOn ? 'stroke' : 'none'};
+          transition: stroke 0.2s ease;
+          pointer-events: stroke;
         }
 
         .slider-thumb {
-          fill: ${currentDevice ? currentDevice.color : '#2196F3'};
-          transition: ${currentDevice && currentDevice.type === "discrete" ? 'all 0.3s ease' : 'r 0.2s ease, filter 0.2s ease'};
+          transition: r 0.2s ease, filter 0.2s ease;
           cursor: pointer;
-          pointer-events: ${isDeviceOn ? 'auto' : 'none'};
+          pointer-events: auto;
         }
 
         .slider-thumb.dragging {
@@ -972,6 +961,12 @@ export class RoomCard extends LitElement {
           gap: 6px;
           margin-right: 8px;
           margin-top: 8px;
+        }
+
+        .chips-column {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
         }
 
         .chip {
