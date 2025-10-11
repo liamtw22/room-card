@@ -536,7 +536,12 @@ export class RoomCard extends LitElement {
     }
 
     this.isDragging = true;
-    this.handlePointerMove(e);
+    
+    // Only update position immediately if we didn't click on the thumb
+    // This prevents the jump when clicking directly on the thumb
+    if (!this.thumbTapped) {
+      this.handlePointerMove(e);
+    }
   }
 
   private handlePointerMove(e: PointerEvent) {
