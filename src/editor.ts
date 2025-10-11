@@ -180,7 +180,7 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _renderAppearanceSection() {
-    let backgroundType = 'static';
+    let backgroundType: string = 'static';
     if (this._config.background && typeof this._config.background === 'object' && 'entity' in this._config.background) {
       backgroundType = 'entity';
     }
@@ -386,7 +386,7 @@ export class RoomCardEditor extends LitElement {
 
   private _renderDeviceConfig(device: any, index: number) {
     const domain = device.entity ? device.entity.split('.')[0] : '';
-    const isLightEntity = domain === 'light';
+    const isLight = domain === 'light';
     const hasEntity = device.entity && device.entity.length > 0;
     const isExpanded = this._expandedDevices[index] !== false;
 
@@ -518,7 +518,7 @@ export class RoomCardEditor extends LitElement {
                 if (value >= 1 && value <= maxColumns) {
                   this._handleDeviceChange({
                     target: { configValue: 'chip_column' },
-                    detail: { value: value }
+                    detail: { value }
                   } as any, index);
                 }
               }}
@@ -530,12 +530,12 @@ export class RoomCardEditor extends LitElement {
               
               <ha-textfield
                 label="Chip On Color"
-                .value=${device.chip_on_color || device.color_on || (isLightEntity ? 'light-color' : DEFAULT_CHIP_ON_COLOR)}
+                .value=${device.chip_on_color || device.color_on || (isLight ? 'light-color' : DEFAULT_CHIP_ON_COLOR)}
                 @input=${(e: any) => this._handleDeviceChange({
                   target: { configValue: 'chip_on_color' },
                   detail: { value: e.target.value }
                 } as any, index)}
-                helper="${isLightEntity ? 'Use "light-color" to match light RGB' : 'Chip background when on'}"
+                helper="${isLight ? 'Use "light-color" to match light RGB' : 'Chip background when on'}"
               ></ha-textfield>
 
               <ha-textfield
@@ -645,64 +645,53 @@ export class RoomCardEditor extends LitElement {
     `;
   }
 
-  private _handleBackgroundTypeChange(type: string) {
+  private _handleBackgroundTypeChange(value: string) {
     if (!this._config) return;
-
+    
     const currentBackground = this._config.background;
 
-    if (type === 'static') {
-      let newColor;
-
+    if (value === 'static') {
+      let staticColor: string;
+      
       if (typeof currentBackground === 'string') {
-        return;
-      } else if (typeof currentBackground === 'object' && currentBackground.ranges && currentBackground.ranges.length > 0) {
-        newColor = currentBackground.ranges[0]?.color || 'var(--ha-card-background)';
-      } else {
-        newColor = 'var(--ha-card-background)';
+        return; // Already static
       }
-
-      this._updateConfig({
-        background: newColor
-      });
-    } else if (type === 'entity') {
+      
+      staticColor = (typeof currentBackground === 'object' && 
+                     currentBackground.ranges && 
+                     currentBackground.ranges.length > 0 &&
+                     currentBackground.ranges[0]?.color) || 
+                    'var(--ha-card-background)';
+      
+      this._updateConfig({ background: staticColor });
+    } else if (value === 'entity') {
       if (typeof currentBackground === 'object' && currentBackground.entity !== undefined) {
-        return;
+        return; // Already entity-based
       }
-
-      const newEntityConfig: any = {
-        entity: '',
-        ranges: []
-      };
-
+      
+      const entityConfig: any = { entity: '', ranges: [] };
+      
       if (typeof currentBackground === 'string' && currentBackground) {
-        newEntityConfig.ranges = [
-          {
-            state: 'on',
-            color: currentBackground
-          },
-          {
-            state: 'off',
-            color: 'var(--state-inactive-color)'
-          }
+        entityConfig.ranges = [
+          { state: 'on', color: currentBackground },
+          { state: 'off', color: 'var(--state-inactive-color)' }
         ];
       }
-
-      this._updateConfig({
-        background: newEntityConfig
-      });
+      
+      this._updateConfig({ background: entityConfig });
     }
   }
 
-  private _handleIconColorTypeChange(type: string) {
-    if (type === 'static') {
+  private _handleIconColorTypeChange(value: string) {
+    if (value === 'static') {
       this._updateConfig({ icon_color: '#FFFFFF' });
     } else {
       this._updateConfig({ icon_color: { entity: '', ranges: [] } });
     }
   }
 
-  private _handleIconBgTypeChange(type: string) {
-    if (type === 'static') {
+  private _handleIconBgTypeChange(value: string) {
+    if (value === 'static') {
       this._updateConfig({ icon_background: 'rgba(255, 255, 255, 0.2)' });
     } else {
       this._updateConfig({ icon_background: { entity: '', ranges: [] } });
@@ -735,11 +724,11 @@ export class RoomCardEditor extends LitElement {
                     type="number"
                     .value=${range.min !== undefined && range.min !== null ? String(range.min) : ''}
                     @input=${(e: any) => {
-                      const val = e.target.value;
-                      if (val === '' || val === null) return;
-                      const parsed = parseFloat(val);
-                      if (!isNaN(parsed)) {
-                        this._updateColorRange(configKey, index, 'min', parsed);
+                      const value = e.target.value;
+                      if (value === '' || value === null) return;
+                      const numValue = parseFloat(value);
+                      if (!isNaN(numValue)) {
+                        this._updateColorRange(configKey, index, 'min', numValue);
                       }
                     }}
                   ></ha-textfield>
@@ -748,11 +737,11 @@ export class RoomCardEditor extends LitElement {
                     type="number"
                     .value=${range.max !== undefined && range.max !== null ? String(range.max) : ''}
                     @input=${(e: any) => {
-                      const val = e.target.value;
-                      if (val === '' || val === null) return;
-                      const parsed = parseFloat(val);
-                      if (!isNaN(parsed)) {
-                        this._updateColorRange(configKey, index, 'max', parsed);
+                      const value = e.target.value;
+                      if (value === '' || value === null) return;
+                      const numValue = parseFloat(value);
+                      if (!isNaN(numValue)) {
+                        this._updateColorRange(configKey, index, 'max', numValue);
                       }
                     }}
                   ></ha-textfield>
@@ -784,19 +773,18 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _addColorRange(configKey: string) {
-    const config = this._config[configKey] || {};
-    const newRange = { min: 0, max: 100, color: '#FFFFFF' };
-    const ranges = [...(config.ranges || []), newRange];
+    const config = (this._config as any)[configKey] || {};
+    const ranges = [...(config.ranges || []), { min: 0, max: 100, color: '#FFFFFF' }];
     this._updateConfig({
       [configKey]: { ...config, ranges }
     });
   }
 
   private _updateColorRange(configKey: string, index: number, field: string, value: any) {
-    const config = this._config[configKey] || {};
+    const config = (this._config as any)[configKey] || {};
     const ranges = [...(config.ranges || [])];
     
-    if ((field === 'min' || field === 'max') && (isNaN(value) || value === null || value === undefined || value === '')) {
+    if ((field === 'min' || field === 'max') && (isNaN(value) || value == null || value === '')) {
       return;
     }
     
@@ -807,7 +795,7 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _removeColorRange(configKey: string, index: number) {
-    const config = this._config[configKey] || {};
+    const config = (this._config as any)[configKey] || {};
     const ranges = [...(config.ranges || [])];
     ranges.splice(index, 1);
     this._updateConfig({
@@ -816,7 +804,7 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _toggleRangeType(configKey: string, index: number) {
-    const config = this._config[configKey] || {};
+    const config = (this._config as any)[configKey] || {};
     const ranges = [...(config.ranges || [])];
     const range = { ...ranges[index] };
 
@@ -852,7 +840,6 @@ export class RoomCardEditor extends LitElement {
       icon_unavailable_color: DEFAULT_ICON_UNAVAILABLE_COLOR
     });
     this._updateConfig({ devices });
-    // Expand the newly added device
     this._expandedDevices = { ...this._expandedDevices, [devices.length - 1]: true };
     this.requestUpdate();
   }
@@ -861,7 +848,6 @@ export class RoomCardEditor extends LitElement {
     const devices = [...(this._config.devices || [])];
     devices.splice(index, 1);
     this._updateConfig({ devices });
-    // Remove from expanded state
     const newExpanded = { ...this._expandedDevices };
     delete newExpanded[index];
     this._expandedDevices = newExpanded;
@@ -952,8 +938,53 @@ export class RoomCardEditor extends LitElement {
 
   private _updateConfig(config: any) {
     this._config = { ...this._config, ...config };
+    
+    // Reorder properties for cleaner YAML output
+    const orderedConfig: any = {};
+    
+    // Define the desired property order
+    const propertyOrder = [
+      'type',
+      'area',
+      'name',
+      'icon',
+      'display_entity_1',
+      'display_entity_1_attribute',
+      'display_entity_1_unit',
+      'display_entity_2',
+      'display_entity_2_attribute',
+      'display_entity_2_unit',
+      'room_name_color',
+      'room_name_size',
+      'display_entity_color',
+      'display_entity_size',
+      'temp_humidity_color', // backwards compatibility
+      'temp_humidity_size', // backwards compatibility
+      'haptic_feedback',
+      'background', // <-- Now comes after haptic_feedback
+      'icon_color',
+      'icon_background',
+      'chip_columns',
+      'devices',
+      'grid_options'
+    ];
+    
+    // Add properties in the defined order
+    propertyOrder.forEach(key => {
+      if (this._config[key] !== undefined) {
+        orderedConfig[key] = this._config[key];
+      }
+    });
+    
+    // Add any remaining properties that weren't in the order list
+    Object.keys(this._config).forEach(key => {
+      if (!orderedConfig.hasOwnProperty(key)) {
+        orderedConfig[key] = this._config[key];
+      }
+    });
+    
     const event = new CustomEvent('config-changed', {
-      detail: { config: this._config },
+      detail: { config: orderedConfig },
       bubbles: true,
       composed: true
     });
@@ -968,41 +999,40 @@ export class RoomCardEditor extends LitElement {
 
     if (configValue === 'entity' && value) {
       const domain = value.split('.')[0];
-      
-      // Get HA default icon for domain
-      const haIcon = HA_DOMAIN_ICONS[domain];
-      // Get HA default color for domain
-      const haColor = HA_DOMAIN_COLORS[domain] || DEFAULT_CHIP_ON_COLOR;
-      
-      // Determine default attribute based on domain
-      let defaultAttr = 'state';
+      const defaultIcon = HA_DOMAIN_ICONS[domain];
+      const defaultColor = HA_DOMAIN_COLORS[domain] || DEFAULT_CHIP_ON_COLOR;
+
+      let defaultAttribute = 'state';
       let defaultScale = 1;
-      
+
       if (domain === 'light') {
-        defaultAttr = 'brightness';
+        defaultAttribute = 'brightness';
         defaultScale = 2.55;
       } else if (domain === 'media_player') {
-        defaultAttr = 'volume_level';
+        defaultAttribute = 'volume_level';
       } else if (domain === 'fan') {
-        defaultAttr = 'percentage';
+        defaultAttribute = 'percentage';
       } else if (domain === 'climate') {
-        defaultAttr = 'temperature';
+        defaultAttribute = 'temperature';
       } else if (domain === 'cover') {
-        defaultAttr = 'position';
+        defaultAttribute = 'position';
       } else if (domain === 'vacuum') {
-        defaultAttr = 'battery_level';
+        defaultAttribute = 'battery_level';
       }
 
       devices[index] = {
         ...devices[index],
         entity: value,
-        icon: haIcon || devices[index].icon || 'mdi:lightbulb',
-        attribute: defaultAttr,
+        icon: defaultIcon || devices[index].icon || 'mdi:lightbulb',
+        attribute: defaultAttribute,
         scale: defaultScale,
-        chip_on_color: haColor
+        chip_on_color: defaultColor
       };
     } else {
-      devices[index] = { ...devices[index], [configValue]: value };
+      devices[index] = {
+        ...devices[index],
+        [configValue]: value
+      };
     }
 
     this._updateConfig({ devices });
