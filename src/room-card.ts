@@ -559,6 +559,61 @@ export class RoomCard extends LitElement {
     }
   }
 
+  private updateVisualOnly() {
+    // Update only the visual elements without re-rendering the entire component
+    const progressEl = this.shadowRoot?.querySelector('.slider-progress');
+    const thumbEl = this.shadowRoot?.querySelector('.slider-thumb');
+    const thumbHitArea = this.shadowRoot?.querySelector('.slider-thumb-hit-area');
+    const thumbIcon = this.shadowRoot?.querySelector('.slider-thumb-icon');
+    
+    if (!progressEl || !thumbEl) return;
+    
+    // Calculate positions
+    const radius = 56;
+    const centerX = 75;
+    const centerY = 75;
+    
+    // Calculate thumb position
+    const thumbAngle = this.valueToAngle(this.sliderValue);
+    const thumbAngleRad = this.degreesToRadians(thumbAngle);
+    const thumbX = centerX + radius * Math.cos(thumbAngleRad);
+    const thumbY = centerY + radius * Math.sin(thumbAngleRad);
+    
+    // Calculate arc path for progress
+    const startAngleRad = this.degreesToRadians(this.startAngle);
+    const startX = centerX + radius * Math.cos(startAngleRad);
+    const startY = centerY + radius * Math.sin(startAngleRad);
+    
+    const progressAngle = this.sliderValue * this.totalAngle;
+    const largeArcFlag = progressAngle > 180 ? 1 : 0;
+    
+    // Update progress arc
+    progressEl.setAttribute('d', `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}`);
+    
+    // Update thumb position
+    thumbEl.setAttribute('cx', String(thumbX));
+    thumbEl.setAttribute('cy', String(thumbY));
+    
+    // Update thumb hit area
+    if (thumbHitArea) {
+      thumbHitArea.setAttribute('cx', String(thumbX));
+      thumbHitArea.setAttribute('cy', String(thumbY));
+    }
+    
+    // Update icon position
+    if (thumbIcon) {
+      thumbIcon.setAttribute('x', String(thumbX - 10));
+      thumbIcon.setAttribute('y', String(thumbY - 10));
+    }
+    
+    // Update dragging state
+    if (this.isDragging) {
+      thumbEl.classList.add('dragging');
+    } else {
+      thumbEl.classList.remove('dragging');
+    }
+  }
+
   private handlePointerMove(e: PointerEvent) {
     if (!this.isDragging) return;
 
@@ -601,7 +656,8 @@ export class RoomCard extends LitElement {
     }
 
     this.sliderValue = newValue;
-    this.requestUpdate();
+    // Use direct DOM manipulation during drag for smooth updates
+    this.updateVisualOnly();
   }
 
   private handlePointerUp(e: PointerEvent) {
