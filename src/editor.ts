@@ -651,13 +651,11 @@ export class RoomCardEditor extends LitElement {
     const currentBackground = this._config.background;
 
     if (value === 'static') {
-      let staticColor: string;
-      
       if (typeof currentBackground === 'string') {
         return; // Already static
       }
       
-      staticColor = (typeof currentBackground === 'object' && 
+      const staticColor = (typeof currentBackground === 'object' && 
                      currentBackground.ranges && 
                      currentBackground.ranges.length > 0 &&
                      currentBackground.ranges[0]?.color) || 
@@ -978,7 +976,7 @@ export class RoomCardEditor extends LitElement {
     
     // Add any remaining properties that weren't in the order list
     Object.keys(this._config).forEach(key => {
-      if (!orderedConfig.hasOwnProperty(key)) {
+      if (!Object.prototype.hasOwnProperty.call(orderedConfig, key)) {
         orderedConfig[key] = this._config[key];
       }
     });
