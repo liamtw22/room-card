@@ -761,10 +761,6 @@ export class RoomCard extends LitElement {
                   @pointerup=${this.handlePointerUp}
                   @pointercancel=${this.handlePointerUp}>
                   <path
-                    class="slider-track"
-                    d="M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}"
-                  />
-                  <path
                     class="slider-progress"
                     style="stroke: ${sliderColor}"
                     d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
@@ -925,13 +921,6 @@ export class RoomCard extends LitElement {
           pointer-events: auto;
         }
 
-        .slider-track {
-          fill: none;
-          stroke: rgb(187, 187, 187);
-          stroke-width: 12;
-          pointer-events: stroke;
-        }
-
         .slider-progress {
           fill: none;
           stroke-width: 12;
@@ -944,10 +933,6 @@ export class RoomCard extends LitElement {
           transition: r 0.2s ease, filter 0.2s ease;
           cursor: pointer;
           pointer-events: auto;
-        }
-
-        .slider-thumb.dragging {
-          r: 20;
         }
 
         .slider-thumb-icon {
@@ -979,10 +964,6 @@ export class RoomCard extends LitElement {
           cursor: pointer;
           transition: all 0.3s ease;
           position: relative;
-        }
-
-        .chip:active {
-          transform: scale(0.95);
         }
 
         .chip ha-icon {
