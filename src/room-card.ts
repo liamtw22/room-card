@@ -513,32 +513,47 @@ export class RoomCard extends LitElement {
 
   private handlePointerDown(e: PointerEvent) {
     e.preventDefault();
+    e.stopPropagation();
+    
     const svg = e.currentTarget as SVGElement;
     if (!svg) return;
 
     svg.setPointerCapture(e.pointerId);
 
+    // Calculate in screen coordinates, not SVG coordinates
     const rect = svg.getBoundingClientRect();
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const x = e.clientX - rect.left - centerX;
-    const y = e.clientY - rect.top - centerY;
-
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    // Get thumb position in screen coordinates
     const thumbAngle = this.valueToAngle(this.sliderValue);
     const thumbAngleRad = this.degreesToRadians(thumbAngle);
-    const thumbX = 56 * Math.cos(thumbAngleRad);
-    const thumbY = 56 * Math.sin(thumbAngleRad);
+    
+    // The SVG viewBox is 150x150, and the actual size is also 150x150
+    // The radius in viewBox units is 56, which maps to actual pixels
+    const svgRadius = 56;
+    const scale = rect.width / 150; // Scale factor from viewBox to screen
+    const actualRadius = svgRadius * scale;
+    
+    const thumbX = centerX + actualRadius * Math.cos(thumbAngleRad);
+    const thumbY = centerY + actualRadius * Math.sin(thumbAngleRad);
 
-    const distanceToThumb = Math.sqrt((x - thumbX) ** 2 + (y - thumbY) ** 2);
+    // Check distance in screen coordinates
+    const distanceToThumb = Math.sqrt(
+      (e.clientX - thumbX) ** 2 + (e.clientY - thumbY) ** 2
+    );
 
-    if (distanceToThumb <= 20) {
+    // Use a 30px hit radius in screen coordinates (larger than the 20 in viewBox)
+    if (distanceToThumb <= 30) {
       this.thumbTapped = true;
+    } else {
+      this.thumbTapped = false;
     }
 
     this.isDragging = true;
+    this.actionTaken = true;
     
     // Only update position immediately if we didn't click on the thumb
-    // This prevents the jump when clicking directly on the thumb
     if (!this.thumbTapped) {
       this.handlePointerMove(e);
     }
@@ -558,13 +573,6 @@ export class RoomCard extends LitElement {
 
     const angle = this.radiansToDegrees(Math.atan2(y, x));
     let newValue = this.angleToValue(angle);
-
-    if (!this.thumbTapped) {
-      this.sliderValue = newValue;
-      this.actionTaken = true;
-      this.requestUpdate();
-      return;
-    }
 
     const currentDevice = this.devices[this.currentDeviceIndex];
     if (currentDevice?.type === "discrete" && currentDevice.modes) {
@@ -592,7 +600,6 @@ export class RoomCard extends LitElement {
       }
     }
 
-    this.actionTaken = true;
     this.sliderValue = newValue;
     this.requestUpdate();
   }
@@ -765,11 +772,18 @@ export class RoomCard extends LitElement {
                   @pointermove=${this.handlePointerMove}
                   @pointerup=${this.handlePointerUp}
                   @pointercancel=${this.handlePointerUp}>
+                  <!-- Track (optional background arc) -->
+                  <path
+                    class="slider-track"
+                    d="M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}"
+                  />
+                  <!-- Progress arc -->
                   <path
                     class="slider-progress"
                     style="stroke: ${sliderColor}"
                     d="M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${thumbX} ${thumbY}"
                   />
+                  <!-- Thumb -->
                   <circle
                     class="slider-thumb ${this.isDragging ? 'dragging' : ''}"
                     style="fill: ${sliderColor}"
@@ -777,6 +791,14 @@ export class RoomCard extends LitElement {
                     cy="${thumbY}"
                     r="16"
                   />
+                  <!-- Larger invisible hit area for easier grabbing -->
+                  <circle
+                    class="slider-thumb-hit-area"
+                    cx="${thumbX}"
+                    cy="${thumbY}"
+                    r="25"
+                  />
+                  <!-- Icon on thumb -->
                   <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
                       <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_on_color || DEFAULT_ICON_ON_COLOR};"></ha-icon>
@@ -924,6 +946,14 @@ export class RoomCard extends LitElement {
           touch-action: none;
           -webkit-tap-highlight-color: transparent;
           pointer-events: auto;
+          cursor: pointer;
+        }
+
+        .slider-track {
+          fill: none;
+          stroke: rgba(187, 187, 187, 0.3);
+          stroke-width: 12;
+          pointer-events: stroke;
         }
 
         .slider-progress {
@@ -936,8 +966,23 @@ export class RoomCard extends LitElement {
 
         .slider-thumb {
           transition: r 0.2s ease, filter 0.2s ease;
-          cursor: pointer;
+          cursor: grab;
+          pointer-events: none;
+        }
+
+        .slider-thumb.dragging {
+          cursor: grabbing;
+          r: 18;
+        }
+
+        .slider-thumb-hit-area {
+          fill: transparent;
+          cursor: grab;
           pointer-events: auto;
+        }
+
+        .slider-thumb-hit-area:active {
+          cursor: grabbing;
         }
 
         .slider-thumb-icon {
