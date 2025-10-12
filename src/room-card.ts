@@ -1007,8 +1007,9 @@ export class RoomCard extends LitElement {
 
         .slider-track {
           fill: none;
-          stroke: rgba(187, 187, 187, 0.3);
-          stroke-width: 12;
+          stroke: rgb(186, 186, 186);
+          stroke-width: 10;
+          stroke-linecap: round
           pointer-events: stroke;
         }
 
@@ -1024,11 +1025,6 @@ export class RoomCard extends LitElement {
           transition: r 0.2s ease, filter 0.2s ease;
           cursor: grab;
           pointer-events: none;
-        }
-
-        .slider-thumb.dragging {
-          cursor: grabbing;
-          r: 18;
         }
 
         .slider-thumb-hit-area {
@@ -1077,7 +1073,6 @@ export class RoomCard extends LitElement {
         }
 
         .unavailable {
-          opacity: 0.5;
           cursor: not-allowed;
         }
 
