@@ -1,5 +1,7 @@
-export interface RoomCardConfig {
-  type: string;
+import { LovelaceCardConfig, ActionConfig } from 'custom-card-helpers';
+
+// Extend LovelaceCardConfig as per HA standards
+export interface RoomCardConfig extends LovelaceCardConfig {
   area: string;
   name?: string;
   icon?: string;
@@ -7,7 +9,10 @@ export interface RoomCardConfig {
   icon_color?: string | EntityColorConfig;
   icon_background?: string | EntityColorConfig;
   
-  // Changed from temperature_sensor and humidity_sensor to generic entity display
+  // Icon tap behavior configuration
+  icon_tap_action?: ActionConfig;
+  
+  // Display entities (replaces temperature/humidity)
   display_entity_1?: string;
   display_entity_2?: string;
   display_entity_1_attribute?: string;
@@ -49,6 +54,11 @@ export interface DeviceConfig {
   show_chip?: boolean;
   show_slider?: boolean;
   
+  // Use standard ActionConfig from custom-card-helpers
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
+  
   // Chip state colors
   chip_on_color?: string;
   chip_off_color?: string;
@@ -61,7 +71,7 @@ export interface DeviceConfig {
   
   // Deprecated but kept for backwards compatibility
   color_on?: string;
-  color_off?: string;
+  color_off_color?: string;
   color_unavailable?: string;
   icon_color?: string;
   
