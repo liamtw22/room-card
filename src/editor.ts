@@ -14,18 +14,6 @@ export class RoomCardEditor extends LitElement {
   };
   @state() private _expandedDevices: { [key: number]: boolean } = {};
 
-  private deviceDefaults: any = {
-    light: { icon: 'mdi:lightbulb', color: '#FDD835', attribute: 'brightness' },
-    switch: { icon: 'mdi:toggle-switch', color: '#4CAF50', attribute: 'state' },
-    fan: { icon: 'mdi:fan', color: '#03A9F4', attribute: 'percentage' },
-    media_player: { icon: 'mdi:speaker', color: '#9C27B0', attribute: 'volume_level' },
-    climate: { icon: 'mdi:thermostat', color: '#FF9800', attribute: 'temperature' },
-    cover: { icon: 'mdi:window-shutter', color: '#795548', attribute: 'position' },
-    vacuum: { icon: 'mdi:robot-vacuum', color: '#607D8B', attribute: 'battery_level' },
-    sensor: { icon: 'mdi:gauge', color: '#00BCD4', attribute: 'state' },
-    camera: { icon: 'mdi:camera', color: '#FF5722', attribute: 'state' },
-  };
-
   setConfig(config: any): void {
     this._config = {
       background: 'var(--ha-card-background)',
@@ -385,8 +373,8 @@ export class RoomCardEditor extends LitElement {
   }
 
   private _renderDeviceConfig(device: any, index: number) {
-    const domain = device.entity ? device.entity.split('.')[0] : '';
-    const isLight = domain === 'light';
+    const entityDomain = device.entity ? device.entity.split('.')[0] : '';
+    const isLight = entityDomain === 'light';
     const hasEntity = device.entity && device.entity.length > 0;
     const isExpanded = this._expandedDevices[index] !== false;
 
@@ -652,7 +640,7 @@ export class RoomCardEditor extends LitElement {
 
     if (value === 'static') {
       if (typeof currentBackground === 'string') {
-        return; // Already static
+        return;
       }
       
       const staticColor = (typeof currentBackground === 'object' && 
@@ -664,7 +652,7 @@ export class RoomCardEditor extends LitElement {
       this._updateConfig({ background: staticColor });
     } else if (value === 'entity') {
       if (typeof currentBackground === 'object' && currentBackground.entity !== undefined) {
-        return; // Already entity-based
+        return;
       }
       
       const entityConfig: any = { entity: '', ranges: [] };
@@ -956,10 +944,10 @@ export class RoomCardEditor extends LitElement {
       'room_name_size',
       'display_entity_color',
       'display_entity_size',
-      'temp_humidity_color', // backwards compatibility
-      'temp_humidity_size', // backwards compatibility
+      'temp_humidity_color',
+      'temp_humidity_size',
       'haptic_feedback',
-      'background', // <-- Now comes after haptic_feedback
+      'background',
       'icon_color',
       'icon_background',
       'chip_columns',
