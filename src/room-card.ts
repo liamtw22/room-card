@@ -728,6 +728,13 @@ export class RoomCard extends LitElement {
     const entity = this.hass.states[controlEntity];
     if (!entity) return;
 
+    // Check if using action-based slider control
+    if (device.slider_control_type === 'action' && device.slider_modes && device.slider_modes.length > 0) {
+      this.handleActionBasedSlider(device);
+      return;
+    }
+
+    // Standard attribute-based control
     const domain = controlEntity.split('.')[0];
     const attribute = device.attribute || 'brightness';
     const scale = device.scale || 1;
@@ -754,6 +761,33 @@ export class RoomCard extends LitElement {
         entity_id: controlEntity,
         position: Math.round(this.sliderValue * 100),
       });
+    }
+  }
+
+  private handleActionBasedSlider(device: DeviceConfig): void {
+    if (!device.slider_modes || device.slider_modes.length === 0) return;
+
+    const sliderPercent = this.sliderValue * 100;
+
+    // Find the closest mode based on slider position
+    let closestMode = device.slider_modes[0];
+    let closestDistance = Math.abs(sliderPercent - closestMode.position);
+
+    for (const mode of device.slider_modes) {
+      const distance = Math.abs(sliderPercent - mode.position);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestMode = mode;
+      }
+    }
+
+    // Snap slider to the closest mode position
+    this.sliderValue = closestMode.position / 100;
+    this.updateVisualOnly();
+
+    // Execute the action if defined
+    if (closestMode.action && this.hass) {
+      handleAction(this, this.hass, { tap_action: closestMode.action }, 'tap');
     }
   }
 
@@ -1020,11 +1054,11 @@ export class RoomCard extends LitElement {
 
       .room-name {
         font-weight: 500;
-        line-height: 1.4;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
+        font-size: 1rem;
+        line-height: 1.3;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: calc(100% - 3rem);
       }
 
       .display-entities {
@@ -1040,10 +1074,10 @@ export class RoomCard extends LitElement {
       .icon-section {
         grid-area: icon;
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         justify-content: flex-start;
         position: relative;
-        padding-top: 2.3125rem;
+        padding-bottom: 0.5rem;
         overflow: visible;
         min-width: 0;
       }
@@ -1053,6 +1087,7 @@ export class RoomCard extends LitElement {
         width: 6.875rem;
         height: 6.875rem;
         margin-left: -0.625rem;
+        margin-bottom: -0.75rem;
         flex-shrink: 0;
       }
 
@@ -1171,6 +1206,18 @@ export class RoomCard extends LitElement {
         transition: all 0.3s ease;
         position: relative;
         flex-shrink: 0;
+      }
+
+      /* Larger chips on mobile/touch devices */
+      @media (max-width: 600px), (hover: none) and (pointer: coarse) {
+        .chip {
+          height: 2.875rem;
+          width: 2.875rem;
+        }
+
+        .chip ha-icon {
+          --mdc-icon-size: 1.75rem;
+        }
       }
 
       .chip:focus {
