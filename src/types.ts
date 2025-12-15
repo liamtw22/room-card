@@ -26,6 +26,21 @@ export interface ModeConfig {
   label: string;
   value: number;
   percentage: number;
+  action?: ActionConfig; // Optional action to call when this mode is selected
+}
+
+// Slider control type
+export type SliderControlType = 'attribute' | 'action';
+
+// Discrete slider mode configuration
+export interface DiscreteSliderConfig {
+  modes: SliderModeConfig[];
+}
+
+export interface SliderModeConfig {
+  position: number; // 0-100 percentage position on slider
+  label?: string;
+  action?: ActionConfig; // Action to perform when slider reaches this position
 }
 
 // Device configuration with action support
@@ -41,6 +56,10 @@ export interface DeviceConfig extends ActionableConfig {
   show_chip?: boolean;
   show_slider?: boolean;
   chip_column?: number;
+
+  // Slider control configuration
+  slider_control_type?: SliderControlType; // 'attribute' (default) or 'action'
+  slider_modes?: SliderModeConfig[]; // For action-based discrete control
 
   // Chip state colors
   chip_on_color?: string;
