@@ -1,7 +1,7 @@
 import { LitElement, html, css, TemplateResult, CSSResultGroup, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, LovelaceCardEditor, fireEvent } from 'custom-card-helpers';
-import type { RoomCardConfig, DeviceConfig } from './types';
+import type { RoomCardConfig, DeviceConfig, SliderModeConfig } from './types';
 import {
   DEFAULT_CHIP_ON_COLOR,
   DEFAULT_CHIP_OFF_COLOR,
@@ -22,12 +22,11 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
   @state() private _expandedSections: Record<string, boolean> = {
     basic: true,
     appearance: false,
-    card_actions: false,
-    icon_actions: false,
-    title_actions: false,
+    actions: false,
     devices: false,
   };
   @state() private _expandedDevices: Record<number, boolean> = {};
+  @state() private _expandedDeviceSections: Record<string, boolean> = {};
 
   public setConfig(config: RoomCardConfig): void {
     this._config = {
@@ -46,9 +45,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
       <div class="card-config">
         ${this._renderBasicSection()}
         ${this._renderAppearanceSection()}
-        ${this._renderCardActionsSection()}
-        ${this._renderIconActionsSection()}
-        ${this._renderTitleActionsSection()}
+        ${this._renderActionsSection()}
         ${this._renderDevicesSection()}
       </div>
     `;
@@ -194,7 +191,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             <ha-textfield
               .label=${'Room Name Size'}
               .value=${this._config!.room_name_size || ''}
-              placeholder="1.125rem"
+              placeholder="1rem"
               @input=${(e: InputEvent) => this._valueChanged('room_name_size', (e.target as HTMLInputElement).value)}
             ></ha-textfield>
           </div>
@@ -274,119 +271,111 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     `;
   }
 
-  // ========== ACTION SECTIONS ==========
-  private _renderCardActionsSection(): TemplateResult {
+  // ========== CONSOLIDATED ACTIONS SECTION ==========
+  private _renderActionsSection(): TemplateResult {
     return html`
       <ha-expansion-panel
         outlined
-        .header=${'Card Actions'}
-        .expanded=${this._expandedSections.card_actions}
-        @expanded-changed=${(e: CustomEvent) => (this._expandedSections.card_actions = e.detail.expanded)}
+        .header=${'Actions'}
+        .expanded=${this._expandedSections.actions}
+        @expanded-changed=${(e: CustomEvent) => (this._expandedSections.actions = e.detail.expanded)}
       >
         <div class="section-content">
-          <p class="helper-text">Configure actions when tapping the card background.</p>
-          
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.tap_action || { action: 'more-info' }}
-            .label=${'Tap Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('tap_action', e.detail.value)}
-          ></ha-selector>
+          <!-- Card Actions -->
+          <div class="action-group">
+            <div class="action-group-header">Card Actions</div>
+            <p class="helper-text">Actions when tapping the card background.</p>
+            
+            <div class="action-row">
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.tap_action || { action: 'more-info' }}
+                .label=${'Tap'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('tap_action', e.detail.value)}
+              ></ha-selector>
 
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.hold_action || { action: 'none' }}
-            .label=${'Hold Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('hold_action', e.detail.value)}
-          ></ha-selector>
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.hold_action || { action: 'none' }}
+                .label=${'Hold'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('hold_action', e.detail.value)}
+              ></ha-selector>
 
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.double_tap_action || { action: 'none' }}
-            .label=${'Double Tap Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('double_tap_action', e.detail.value)}
-          ></ha-selector>
-        </div>
-      </ha-expansion-panel>
-    `;
-  }
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.double_tap_action || { action: 'none' }}
+                .label=${'Double Tap'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('double_tap_action', e.detail.value)}
+              ></ha-selector>
+            </div>
+          </div>
 
-  private _renderIconActionsSection(): TemplateResult {
-    return html`
-      <ha-expansion-panel
-        outlined
-        .header=${'Icon Actions'}
-        .expanded=${this._expandedSections.icon_actions}
-        @expanded-changed=${(e: CustomEvent) => (this._expandedSections.icon_actions = e.detail.expanded)}
-      >
-        <div class="section-content">
-          <p class="helper-text">Configure actions when tapping the main icon. Default: cycle through active devices.</p>
-          
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.icon_tap_action || { action: 'none' }}
-            .label=${'Tap Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('icon_tap_action', e.detail.value)}
-          ></ha-selector>
+          <!-- Title Actions -->
+          <div class="action-group">
+            <div class="action-group-header">Title Actions</div>
+            <p class="helper-text">Actions when tapping the title/stats area. Default: navigate to area.</p>
+            
+            <div class="action-row">
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.title_tap_action || { action: 'navigate' }}
+                .label=${'Tap'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('title_tap_action', e.detail.value)}
+              ></ha-selector>
 
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.icon_hold_action || { action: 'none' }}
-            .label=${'Hold Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('icon_hold_action', e.detail.value)}
-          ></ha-selector>
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.title_hold_action || { action: 'none' }}
+                .label=${'Hold'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('title_hold_action', e.detail.value)}
+              ></ha-selector>
 
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.icon_double_tap_action || { action: 'none' }}
-            .label=${'Double Tap Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('icon_double_tap_action', e.detail.value)}
-          ></ha-selector>
-        </div>
-      </ha-expansion-panel>
-    `;
-  }
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.title_double_tap_action || { action: 'none' }}
+                .label=${'Double Tap'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('title_double_tap_action', e.detail.value)}
+              ></ha-selector>
+            </div>
+          </div>
 
-  private _renderTitleActionsSection(): TemplateResult {
-    return html`
-      <ha-expansion-panel
-        outlined
-        .header=${'Title Actions'}
-        .expanded=${this._expandedSections.title_actions}
-        @expanded-changed=${(e: CustomEvent) => (this._expandedSections.title_actions = e.detail.expanded)}
-      >
-        <div class="section-content">
-          <p class="helper-text">Configure actions when tapping the title/stats area. Default: navigate to area.</p>
-          
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.title_tap_action || { action: 'navigate' }}
-            .label=${'Tap Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('title_tap_action', e.detail.value)}
-          ></ha-selector>
+          <!-- Icon Actions -->
+          <div class="action-group">
+            <div class="action-group-header">Icon Actions</div>
+            <p class="helper-text">Actions when tapping the main icon. Default: cycle through active devices.</p>
+            
+            <div class="action-row">
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.icon_tap_action || { action: 'none' }}
+                .label=${'Tap'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('icon_tap_action', e.detail.value)}
+              ></ha-selector>
 
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.title_hold_action || { action: 'none' }}
-            .label=${'Hold Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('title_hold_action', e.detail.value)}
-          ></ha-selector>
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.icon_hold_action || { action: 'none' }}
+                .label=${'Hold'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('icon_hold_action', e.detail.value)}
+              ></ha-selector>
 
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${ACTION_SCHEMA}
-            .value=${this._config!.title_double_tap_action || { action: 'none' }}
-            .label=${'Double Tap Action'}
-            @value-changed=${(e: CustomEvent) => this._valueChanged('title_double_tap_action', e.detail.value)}
-          ></ha-selector>
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${ACTION_SCHEMA}
+                .value=${this._config!.icon_double_tap_action || { action: 'none' }}
+                .label=${'Double Tap'}
+                @value-changed=${(e: CustomEvent) => this._valueChanged('icon_double_tap_action', e.detail.value)}
+              ></ha-selector>
+            </div>
+          </div>
         </div>
       </ha-expansion-panel>
     `;
@@ -419,6 +408,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     const domain = device.entity?.split('.')[0] || '';
     const entityState = device.entity ? this.hass.states[device.entity] : undefined;
     const friendlyName = entityState?.attributes?.friendly_name || device.name || device.entity || 'New Device';
+    const isActionBased = device.slider_control_type === 'action';
+
+    // Get available attributes for the entity
+    const availableAttributes = entityState 
+      ? ['state', ...Object.keys(entityState.attributes || {})]
+      : ['state', 'brightness', 'volume_level', 'percentage', 'position', 'temperature'];
 
     return html`
       <ha-expansion-panel
@@ -432,6 +427,7 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         </ha-icon-button>
 
         <div class="device-config">
+          <!-- Basic Settings -->
           <ha-selector
             .hass=${this.hass}
             .selector=${{ entity: {} }}
@@ -482,7 +478,117 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             </ha-formfield>
           </div>
 
-          <ha-expansion-panel outlined .header=${'Device Colors'}>
+          <!-- Slider Configuration -->
+          <ha-expansion-panel 
+            outlined 
+            .header=${'Slider Configuration'}
+            .expanded=${this._expandedDeviceSections[`${index}-slider`] || false}
+            @expanded-changed=${(e: CustomEvent) => (this._expandedDeviceSections[`${index}-slider`] = e.detail.expanded)}
+          >
+            <div class="slider-config">
+              <ha-selector
+                .hass=${this.hass}
+                .selector=${{ select: { options: [
+                  { value: 'attribute', label: 'Attribute-based (continuous)' },
+                  { value: 'action', label: 'Action-based (discrete modes)' }
+                ]}}}
+                .value=${device.slider_control_type || 'attribute'}
+                .label=${'Slider Control Type'}
+                @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'slider_control_type', e.detail.value)}
+              ></ha-selector>
+
+              ${!isActionBased ? html`
+                <!-- Attribute-based slider config -->
+                <ha-selector
+                  .hass=${this.hass}
+                  .selector=${{ select: { 
+                    options: availableAttributes.map(attr => ({ value: attr, label: attr })),
+                    custom_value: true
+                  }}}
+                  .value=${device.attribute || 'brightness'}
+                  .label=${'Attribute'}
+                  @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'attribute', e.detail.value)}
+                ></ha-selector>
+
+                <ha-textfield
+                  .label=${'Scale Factor'}
+                  type="number"
+                  step="0.01"
+                  .value=${device.scale?.toString() || '1'}
+                  @input=${(e: InputEvent) => this._updateDevice(index, 'scale', parseFloat((e.target as HTMLInputElement).value) || 1)}
+                ></ha-textfield>
+                <p class="helper-text">Scale factor converts 0-100% to attribute value. E.g., brightness uses 2.55 (0-255).</p>
+              ` : html`
+                <!-- Action-based slider config -->
+                <p class="helper-text">Configure discrete positions on the slider. Each position triggers an action when selected.</p>
+                
+                <div class="slider-modes">
+                  <div class="modes-header">
+                    <span>Slider Modes</span>
+                    <ha-icon-button
+                      .label=${'Add mode'}
+                      @click=${() => this._addSliderMode(index)}
+                    >
+                      <ha-icon icon="mdi:plus"></ha-icon>
+                    </ha-icon-button>
+                  </div>
+
+                  ${(device.slider_modes || []).map((mode, modeIndex) => html`
+                    <div class="slider-mode-item">
+                      <div class="mode-header">
+                        <span>Mode ${modeIndex + 1}: ${mode.label || `${mode.position}%`}</span>
+                        <ha-icon-button
+                          .label=${'Remove mode'}
+                          @click=${() => this._removeSliderMode(index, modeIndex)}
+                        >
+                          <ha-icon icon="mdi:delete"></ha-icon>
+                        </ha-icon-button>
+                      </div>
+
+                      <div class="mode-config">
+                        <div class="side-by-side">
+                          <ha-textfield
+                            .label=${'Position (%)'}
+                            type="number"
+                            min="0"
+                            max="100"
+                            .value=${mode.position?.toString() || '0'}
+                            @input=${(e: InputEvent) => this._updateSliderMode(index, modeIndex, 'position', parseInt((e.target as HTMLInputElement).value) || 0)}
+                          ></ha-textfield>
+
+                          <ha-textfield
+                            .label=${'Label'}
+                            .value=${mode.label || ''}
+                            @input=${(e: InputEvent) => this._updateSliderMode(index, modeIndex, 'label', (e.target as HTMLInputElement).value)}
+                          ></ha-textfield>
+                        </div>
+
+                        <ha-selector
+                          .hass=${this.hass}
+                          .selector=${ACTION_SCHEMA}
+                          .value=${mode.action || { action: 'none' }}
+                          .label=${'Action'}
+                          @value-changed=${(e: CustomEvent) => this._updateSliderMode(index, modeIndex, 'action', e.detail.value)}
+                        ></ha-selector>
+                      </div>
+                    </div>
+                  `)}
+
+                  ${(!device.slider_modes || device.slider_modes.length === 0) ? html`
+                    <p class="helper-text empty-modes">No modes configured. Click + to add slider positions.</p>
+                  ` : nothing}
+                </div>
+              `}
+            </div>
+          </ha-expansion-panel>
+
+          <!-- Device Colors -->
+          <ha-expansion-panel 
+            outlined 
+            .header=${'Colors'}
+            .expanded=${this._expandedDeviceSections[`${index}-colors`] || false}
+            @expanded-changed=${(e: CustomEvent) => (this._expandedDeviceSections[`${index}-colors`] = e.detail.expanded)}
+          >
             <div class="color-grid">
               <ha-textfield
                 .label=${'Chip On Color'}
@@ -514,33 +620,41 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
             </div>
           </ha-expansion-panel>
 
-          <ha-expansion-panel outlined .header=${'Device Actions'}>
+          <!-- Chip Actions -->
+          <ha-expansion-panel 
+            outlined 
+            .header=${'Chip Actions'}
+            .expanded=${this._expandedDeviceSections[`${index}-actions`] || false}
+            @expanded-changed=${(e: CustomEvent) => (this._expandedDeviceSections[`${index}-actions`] = e.detail.expanded)}
+          >
             <div class="actions-config">
-              <p class="helper-text">Configure tap and hold actions for this device chip. Default: tap toggles, hold opens more-info.</p>
+              <p class="helper-text">Chip tap/hold actions. Default: tap toggles, hold opens more-info.</p>
               
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${ACTION_SCHEMA}
-                .value=${device.tap_action || { action: 'toggle' }}
-                .label=${'Tap Action'}
-                @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'tap_action', e.detail.value)}
-              ></ha-selector>
+              <div class="action-row">
+                <ha-selector
+                  .hass=${this.hass}
+                  .selector=${ACTION_SCHEMA}
+                  .value=${device.tap_action || { action: 'toggle' }}
+                  .label=${'Tap'}
+                  @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'tap_action', e.detail.value)}
+                ></ha-selector>
 
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${ACTION_SCHEMA}
-                .value=${device.hold_action || { action: 'more-info' }}
-                .label=${'Hold Action'}
-                @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'hold_action', e.detail.value)}
-              ></ha-selector>
+                <ha-selector
+                  .hass=${this.hass}
+                  .selector=${ACTION_SCHEMA}
+                  .value=${device.hold_action || { action: 'more-info' }}
+                  .label=${'Hold'}
+                  @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'hold_action', e.detail.value)}
+                ></ha-selector>
 
-              <ha-selector
-                .hass=${this.hass}
-                .selector=${ACTION_SCHEMA}
-                .value=${device.double_tap_action || { action: 'none' }}
-                .label=${'Double Tap Action'}
-                @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'double_tap_action', e.detail.value)}
-              ></ha-selector>
+                <ha-selector
+                  .hass=${this.hass}
+                  .selector=${ACTION_SCHEMA}
+                  .value=${device.double_tap_action || { action: 'none' }}
+                  .label=${'Double Tap'}
+                  @value-changed=${(e: CustomEvent) => this._updateDevice(index, 'double_tap_action', e.detail.value)}
+                ></ha-selector>
+              </div>
             </div>
           </ha-expansion-panel>
         </div>
@@ -631,6 +745,56 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
     this._valueChanged('devices', devices);
   }
 
+  private _addSliderMode(deviceIndex: number): void {
+    const devices = [...(this._config!.devices || [])];
+    const device = devices[deviceIndex];
+    const modes = device.slider_modes || [];
+    
+    // Calculate next position (evenly distributed)
+    const existingPositions = modes.map(m => m.position);
+    let newPosition = 0;
+    if (modes.length === 0) {
+      newPosition = 0;
+    } else if (modes.length === 1) {
+      newPosition = 100;
+    } else {
+      // Find a gap
+      for (let i = 0; i <= 100; i += 25) {
+        if (!existingPositions.includes(i)) {
+          newPosition = i;
+          break;
+        }
+      }
+    }
+
+    devices[deviceIndex] = {
+      ...device,
+      slider_modes: [...modes, { position: newPosition, label: '', action: { action: 'none' } }]
+    };
+    
+    this._valueChanged('devices', devices);
+  }
+
+  private _removeSliderMode(deviceIndex: number, modeIndex: number): void {
+    const devices = [...(this._config!.devices || [])];
+    const device = devices[deviceIndex];
+    const modes = (device.slider_modes || []).filter((_, i) => i !== modeIndex);
+    
+    devices[deviceIndex] = { ...device, slider_modes: modes };
+    this._valueChanged('devices', devices);
+  }
+
+  private _updateSliderMode(deviceIndex: number, modeIndex: number, key: string, value: any): void {
+    const devices = [...(this._config!.devices || [])];
+    const device = devices[deviceIndex];
+    const modes = [...(device.slider_modes || [])];
+    
+    modes[modeIndex] = { ...modes[modeIndex], [key]: value };
+    devices[deviceIndex] = { ...device, slider_modes: modes };
+    
+    this._valueChanged('devices', devices);
+  }
+
   // ========== STYLES ==========
   static get styles(): CSSResultGroup {
     return css`
@@ -679,6 +843,12 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         padding: 0;
       }
 
+      .empty-modes {
+        font-style: italic;
+        padding: 8px;
+        text-align: center;
+      }
+
       .entity-color-config {
         display: flex;
         flex-direction: column;
@@ -694,7 +864,8 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         gap: 8px;
       }
 
-      .ranges-header {
+      .ranges-header,
+      .modes-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -715,11 +886,65 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
         padding: 12px;
       }
 
-      .actions-config {
+      .actions-config,
+      .slider-config {
         display: flex;
         flex-direction: column;
         gap: 12px;
         padding: 12px;
+      }
+
+      /* Action groups in consolidated section */
+      .action-group {
+        padding: 12px;
+        background: var(--secondary-background-color);
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+
+      .action-group:last-child {
+        margin-bottom: 0;
+      }
+
+      .action-group-header {
+        font-weight: 500;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+
+      .action-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+        margin-top: 8px;
+      }
+
+      /* Slider modes */
+      .slider-modes {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .slider-mode-item {
+        padding: 12px;
+        background: var(--secondary-background-color);
+        border-radius: 8px;
+        border: 1px solid var(--divider-color);
+      }
+
+      .mode-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+
+      .mode-config {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
 
       ha-formfield {
@@ -737,6 +962,29 @@ export class RoomCardEditor extends LitElement implements LovelaceCardEditor {
 
       ha-icon-button:hover {
         color: var(--primary-color);
+      }
+
+      /* Responsive styles */
+      @media (max-width: 600px) {
+        .action-row {
+          grid-template-columns: 1fr;
+        }
+
+        .side-by-side {
+          grid-template-columns: 1fr;
+        }
+
+        .range-item {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .range-item ha-textfield:nth-child(3) {
+          grid-column: span 2;
+        }
+
+        .color-grid {
+          grid-template-columns: 1fr;
+        }
       }
     `;
   }
