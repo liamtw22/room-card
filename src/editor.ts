@@ -8,6 +8,11 @@ import {
   DEFAULT_ICON_ON_COLOR,
   DEFAULT_ICON_OFF_COLOR,
   DEFAULT_ICON_UNAVAILABLE_COLOR,
+  DEFAULT_CARD_BACKGROUND,
+  DEFAULT_ICON_COLOR,
+  DEFAULT_ICON_BACKGROUND_COLOR,
+  DEFAULT_TITLE_SIZE,
+  DEFAULT_SUBTITLE_SIZE,
   HA_DOMAIN_COLORS,
   HA_DOMAIN_ICONS,
 } from './const';
@@ -19,14 +24,21 @@ export class RoomCardEditor extends LitElement {
   @state() private _expandedSections = {
     basic: true,
     appearance: false,
+    actions: false,
     devices: false,
   };
   @state() private _expandedDevices: { [key: number]: boolean } = {};
 
   setConfig(config: any): void {
     this._config = {
-      background: 'var(--ha-card-background)',
+      background: DEFAULT_CARD_BACKGROUND,
       haptic_feedback: true,
+      card_tap_action: { action: 'none' },
+      card_hold_action: { action: 'none' },
+      title_tap_action: { action: 'none' },
+      title_hold_action: { action: 'none' },
+      icon_tap_action: { action: 'none' },
+      icon_hold_action: { action: 'none' },
       ...config,
     };
   }
@@ -40,6 +52,7 @@ export class RoomCardEditor extends LitElement {
       <div class="card-config">
         ${this._renderBasicSection()}
         ${this._renderAppearanceSection()}
+        ${this._renderActionsSection()}
         ${this._renderDevicesSection()}
       </div>
     `;
@@ -134,20 +147,6 @@ export class RoomCardEditor extends LitElement {
               @input=${(e: any) => this._updateConfig({ display_entity_2_unit: e.target.value })}
               helper="Unit to display (e.g., °F, °C, %)"
             ></ha-textfield>
-
-            <ha-textfield
-              label="Subtitle Entities Color"
-              .value=${this._config.display_entity_color || 'var(--primary-text-color)'}
-              @input=${(e: any) => this._updateConfig({ display_entity_color: e.target.value })}
-              helper="CSS color"
-            ></ha-textfield>
-
-            <ha-textfield
-              label="Subtitle Entities Font Size"
-              .value=${this._config.display_entity_size || 'clamp(0.65rem, 3cqi, 0.85rem)'}
-              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
-              helper="CSS size (e.g., 12px, 0.75rem, clamp(...))"
-            ></ha-textfield>
           </div>
 
           <ha-formfield label="Haptic Feedback">
@@ -189,19 +188,37 @@ export class RoomCardEditor extends LitElement {
         @expanded-changed=${(e: any) => (this._expandedSections.appearance = e.detail.expanded)}
       >
         <div class="section-content">
-          <ha-textfield
-            label="Room Name Color"
-            .value=${this._config.room_name_color || 'var(--primary-text-color)'}
-            @input=${(e: any) => this._updateConfig({ room_name_color: e.target.value })}
-            helper="CSS color"
-          ></ha-textfield>
+          <div class="subsection">
+            <label>Typography</label>
 
-          <ha-textfield
-            label="Room Name Font Size"
-            .value=${this._config.room_name_size || 'clamp(0.75rem, 3.5cqi, 1rem)'}
-            @input=${(e: any) => this._updateConfig({ room_name_size: e.target.value })}
-            helper="CSS size (e.g., 14px, 0.875rem, clamp(...))"
-          ></ha-textfield>
+            <ha-textfield
+              label="Room Name Color"
+              .value=${this._config.room_name_color || 'var(--primary-text-color)'}
+              @input=${(e: any) => this._updateConfig({ room_name_color: e.target.value })}
+              helper="CSS color"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Room Name Font Size"
+              .value=${this._config.room_name_size || DEFAULT_TITLE_SIZE}
+              @input=${(e: any) => this._updateConfig({ room_name_size: e.target.value })}
+              helper="CSS size (e.g., 14px, 0.875rem, clamp(...))"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Subtitle Color"
+              .value=${this._config.display_entity_color || 'var(--primary-text-color)'}
+              @input=${(e: any) => this._updateConfig({ display_entity_color: e.target.value })}
+              helper="CSS color"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Subtitle Font Size"
+              .value=${this._config.display_entity_size || DEFAULT_SUBTITLE_SIZE}
+              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
+              helper="CSS size (e.g., 12px, 0.75rem)"
+            ></ha-textfield>
+          </div>
 
           <div class="color-config-section">
             <label>Background Color</label>
@@ -218,7 +235,7 @@ export class RoomCardEditor extends LitElement {
               .value=${backgroundType}
               @value-changed=${(e: CustomEvent) => {
                 if (e.detail.value === 'static') {
-                  this._updateConfig({ background: 'var(--ha-card-background)' });
+                  this._updateConfig({ background: DEFAULT_CARD_BACKGROUND });
                 } else {
                   this._updateConfig({ background: { entity: '', ranges: [] } });
                 }
@@ -231,7 +248,7 @@ export class RoomCardEditor extends LitElement {
                     label="Background Color (hex, rgb, rgba)"
                     .value=${typeof this._config.background === 'string'
                       ? this._config.background
-                      : 'var(--ha-card-background)'}
+                      : DEFAULT_CARD_BACKGROUND}
                     @input=${(e: any) => {
                       this._updateConfig({ background: e.target.value });
                     }}
@@ -276,7 +293,7 @@ export class RoomCardEditor extends LitElement {
               .value=${iconColorType}
               @value-changed=${(e: CustomEvent) => {
                 if (e.detail.value === 'static') {
-                  this._updateConfig({ icon_color: '#FFFFFF' });
+                  this._updateConfig({ icon_color: DEFAULT_ICON_COLOR });
                 } else {
                   this._updateConfig({ icon_color: { entity: '', ranges: [] } });
                 }
@@ -289,7 +306,7 @@ export class RoomCardEditor extends LitElement {
                     label="Icon Color (hex, rgb, rgba)"
                     .value=${typeof this._config.icon_color === 'string'
                       ? this._config.icon_color
-                      : '#FFFFFF'}
+                      : DEFAULT_ICON_COLOR}
                     @input=${(e: any) => {
                       this._updateConfig({ icon_color: e.target.value });
                     }}
@@ -334,7 +351,7 @@ export class RoomCardEditor extends LitElement {
               .value=${iconBgColorType}
               @value-changed=${(e: CustomEvent) => {
                 if (e.detail.value === 'static') {
-                  this._updateConfig({ icon_background: 'rgba(255, 255, 255, 0.2)' });
+                  this._updateConfig({ icon_background: DEFAULT_ICON_BACKGROUND_COLOR });
                 } else {
                   this._updateConfig({ icon_background: { entity: '', ranges: [] } });
                 }
@@ -347,7 +364,7 @@ export class RoomCardEditor extends LitElement {
                     label="Icon Background Color (hex, rgb, rgba)"
                     .value=${typeof this._config.icon_background === 'string'
                       ? this._config.icon_background
-                      : 'rgba(255, 255, 255, 0.2)'}
+                      : DEFAULT_ICON_BACKGROUND_COLOR}
                     @input=${(e: any) => {
                       this._updateConfig({ icon_background: e.target.value });
                     }}
@@ -380,6 +397,87 @@ export class RoomCardEditor extends LitElement {
                       )
                     : ''}
                 `}
+          </div>
+        </div>
+      </ha-expansion-panel>
+    `;
+  }
+
+  private _renderActionsSection() {
+    return html`
+      <ha-expansion-panel
+        .header=${'Actions'}
+        .expanded=${this._expandedSections.actions}
+        @expanded-changed=${(e: any) => (this._expandedSections.actions = e.detail.expanded)}
+      >
+        <div class="section-content">
+          <div class="subsection">
+            <label>Card Actions</label>
+            <p class="helper-text">Actions for tapping/holding the card background</p>
+            
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ ui_action: {} }}
+              .value=${this._config.card_tap_action || { action: 'none' }}
+              .label=${'Tap Action'}
+              @value-changed=${(e: CustomEvent) =>
+                this._updateConfig({ card_tap_action: e.detail.value })}
+            ></ha-selector>
+
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ ui_action: {} }}
+              .value=${this._config.card_hold_action || { action: 'none' }}
+              .label=${'Hold Action'}
+              @value-changed=${(e: CustomEvent) =>
+                this._updateConfig({ card_hold_action: e.detail.value })}
+            ></ha-selector>
+          </div>
+
+          <div class="subsection">
+            <label>Title Section Actions</label>
+            <p class="helper-text">Actions for tapping/holding the room name and subtitle</p>
+            
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ ui_action: {} }}
+              .value=${this._config.title_tap_action || { action: 'none' }}
+              .label=${'Tap Action'}
+              @value-changed=${(e: CustomEvent) =>
+                this._updateConfig({ title_tap_action: e.detail.value })}
+            ></ha-selector>
+
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ ui_action: {} }}
+              .value=${this._config.title_hold_action || { action: 'none' }}
+              .label=${'Hold Action'}
+              @value-changed=${(e: CustomEvent) =>
+                this._updateConfig({ title_hold_action: e.detail.value })}
+            ></ha-selector>
+          </div>
+
+          <div class="subsection">
+            <label>Icon Actions</label>
+            <p class="helper-text">Actions for tapping/holding the main icon</p>
+            
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ ui_action: {} }}
+              .value=${this._config.icon_tap_action || { action: 'none' }}
+              .label=${'Tap Action'}
+              @value-changed=${(e: CustomEvent) =>
+                this._updateConfig({ icon_tap_action: e.detail.value })}
+            ></ha-selector>
+
+            <ha-selector
+              .hass=${this.hass}
+              .selector=${{ ui_action: {} }}
+              .value=${this._config.icon_hold_action || { action: 'none' }}
+              .label=${'Hold Action'}
+              @value-changed=${(e: CustomEvent) =>
+                this._updateConfig({ icon_hold_action: e.detail.value })}
+            ></ha-selector>
           </div>
         </div>
       </ha-expansion-panel>
@@ -565,6 +663,33 @@ export class RoomCardEditor extends LitElement {
                   </ha-formfield>
                 </div>
 
+                <div class="subsection">
+                  <label>Chip Actions</label>
+                  <p class="helper-text">Actions for this device chip</p>
+
+                  <ha-selector
+                    .hass=${this.hass}
+                    .selector=${{ ui_action: {} }}
+                    .value=${device.tap_action || { action: 'toggle' }}
+                    .label=${'Tap Action'}
+                    @value-changed=${(e: CustomEvent) =>
+                      this._deviceValueChanged(index, {
+                        target: { configValue: 'tap_action', value: e.detail.value },
+                      } as any)}
+                  ></ha-selector>
+
+                  <ha-selector
+                    .hass=${this.hass}
+                    .selector=${{ ui_action: {} }}
+                    .value=${device.hold_action || { action: 'more-info' }}
+                    .label=${'Hold Action'}
+                    @value-changed=${(e: CustomEvent) =>
+                      this._deviceValueChanged(index, {
+                        target: { configValue: 'hold_action', value: e.detail.value },
+                      } as any)}
+                  ></ha-selector>
+                </div>
+
                 <div class="device-colors">
                   <label>Chip Colors</label>
                   <ha-textfield
@@ -643,22 +768,34 @@ export class RoomCardEditor extends LitElement {
           ${modes.map(
             (mode: any, modeIndex: number) => html`
               <div class="mode-item">
-                <ha-textfield
-                  label="Label"
-                  .value=${mode.label || ''}
-                  @input=${(e: any) =>
-                    this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
-                ></ha-textfield>
-                <ha-textfield
-                  label="Value (0-1)"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                  .value=${mode.value || 0}
-                  @input=${(e: any) =>
-                    this._updateMode(deviceIndex, modeIndex, 'value', parseFloat(e.target.value))}
-                ></ha-textfield>
+                <div class="mode-inputs">
+                  <ha-textfield
+                    label="Label"
+                    .value=${mode.label || ''}
+                    @input=${(e: any) =>
+                      this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
+                  ></ha-textfield>
+                  <ha-textfield
+                    label="Value (0-1)"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    .value=${mode.value || 0}
+                    @input=${(e: any) =>
+                      this._updateMode(deviceIndex, modeIndex, 'value', parseFloat(e.target.value))}
+                  ></ha-textfield>
+                </div>
+                <div class="mode-action">
+                  <ha-selector
+                    .hass=${this.hass}
+                    .selector=${{ ui_action: {} }}
+                    .value=${mode.action || { action: 'none' }}
+                    .label=${'Mode Action'}
+                    @value-changed=${(e: CustomEvent) =>
+                      this._updateMode(deviceIndex, modeIndex, 'action', e.detail.value)}
+                  ></ha-selector>
+                </div>
                 <ha-icon-button
                   @click=${() => this._removeMode(deviceIndex, modeIndex)}
                   .path=${'M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z'}
@@ -786,6 +923,8 @@ export class RoomCardEditor extends LitElement {
       show_chip: true,
       show_slider: true,
       chip_column: 1,
+      tap_action: { action: 'toggle' },
+      hold_action: { action: 'more-info' },
     });
     this._updateConfig({ devices });
   }
@@ -848,8 +987,9 @@ export class RoomCardEditor extends LitElement {
     const modes = [...(devices[deviceIndex].modes || [])];
     modes.push({
       label: `Mode ${modes.length + 1}`,
-      value: modes.length,
+      value: modes.length / Math.max(modes.length, 1),
       percentage: modes.length * 33,
+      action: { action: 'none' },
     });
     devices[deviceIndex] = { ...devices[deviceIndex], modes };
     this._updateConfig({ devices });
@@ -940,12 +1080,18 @@ export class RoomCardEditor extends LitElement {
         gap: 8px;
         padding: 12px;
         background: var(--card-background-color);
-        border-radius: 4px;
+        border-radius: 8px;
       }
 
       .subsection label {
         font-weight: 500;
         font-size: 14px;
+      }
+
+      .helper-text {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        margin: 0 0 8px 0;
       }
 
       ha-formfield {
@@ -995,10 +1141,38 @@ export class RoomCardEditor extends LitElement {
       .ranges-list {
         display: flex;
         flex-direction: column;
+        gap: 12px;
+      }
+
+      .mode-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        background: var(--card-background-color);
+        border-radius: 8px;
+        position: relative;
+      }
+
+      .mode-item > ha-icon-button {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+      }
+
+      .mode-inputs {
+        display: flex;
         gap: 8px;
       }
 
-      .mode-item,
+      .mode-inputs ha-textfield {
+        flex: 1;
+      }
+
+      .mode-action {
+        margin-top: 8px;
+      }
+
       .range-item {
         display: flex;
         align-items: center;
@@ -1012,7 +1186,6 @@ export class RoomCardEditor extends LitElement {
         flex: 1;
       }
 
-      .mode-item ha-textfield,
       .range-item ha-textfield {
         flex: 1;
       }
