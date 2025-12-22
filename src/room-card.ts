@@ -1,6 +1,6 @@
 import { LitElement, html, TemplateResult, PropertyValues, CSSResultGroup, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, forwardHaptic } from 'custom-card-helpers';
+import { HomeAssistant, forwardHaptic, stateIcon } from 'custom-card-helpers';
 import { HassEntity } from 'home-assistant-js-websocket';
 
 import type { RoomCardConfig, DeviceConfig } from './types';
@@ -40,12 +40,28 @@ export class RoomCard extends LitElement {
     return document.createElement('room-card-editor');
   }
 
-  public static getLayoutOptions() {
+  // Standard HA method for Sections view grid sizing
+  public static getGridOptions() {
     return {
-      grid_columns: 2,
-      grid_rows: 3,
-      grid_min_columns: 1,
-      grid_min_rows: 2,
+      columns: 2,
+      rows: 3,
+      min_columns: 1,
+      min_rows: 2,
+    };
+  }
+
+  // Standard HA method for Masonry view sizing
+  public getCardSize(): number {
+    return 3;
+  }
+
+  // Instance method for dynamic grid options based on config
+  public getGridOptions() {
+    return {
+      columns: this._config?.layout_options?.grid_columns || 2,
+      rows: this._config?.layout_options?.grid_rows || 3,
+      min_columns: this._config?.layout_options?.grid_min_columns || 1,
+      min_rows: this._config?.layout_options?.grid_min_rows || 2,
     };
   }
 
@@ -81,16 +97,6 @@ export class RoomCard extends LitElement {
     this.devices = config.devices || [];
   }
 
-  public getLayoutOptions() {
-    // Return layout options from config or defaults
-    return this._config?.layout_options || {
-      grid_columns: 2,
-      grid_rows: 3,
-      grid_min_columns: 1,
-      grid_min_rows: 2,
-    };
-  }
-
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     if (!this._config) {
       return false;
@@ -106,6 +112,11 @@ export class RoomCard extends LitElement {
 
     const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
     if (!oldHass) {
+      return true;
+    }
+
+    // Check for theme or language changes (HA standard practice)
+    if (oldHass.themes !== this.hass.themes || oldHass.language !== this.hass.language) {
       return true;
     }
 
@@ -330,6 +341,25 @@ export class RoomCard extends LitElement {
     }
   }
 
+  // Get device icon - use configured icon, or fall back to HA's stateIcon for dynamic resolution
+  private getDeviceIcon(device: DeviceConfig): string {
+    if (device.icon) {
+      return device.icon;
+    }
+    
+    // Use HA's stateIcon helper for dynamic icon based on entity state
+    const entityId = device.control_entity || device.entity;
+    const entity = this.hass.states[entityId];
+    
+    if (entity) {
+      // stateIcon returns the appropriate icon based on entity state and domain
+      return stateIcon(entity) || 'mdi:help-circle';
+    }
+    
+    // Fallback if entity doesn't exist
+    return 'mdi:help-circle';
+  }
+
   private getSliderColor(device: DeviceConfig, entity: HassEntity | undefined): string {
     if (!entity || entity.state === 'unavailable') {
       return device.chip_unavailable_color || DEFAULT_CHIP_UNAVAILABLE_COLOR;
@@ -409,6 +439,11 @@ export class RoomCard extends LitElement {
     this.isDragging = true;
     this.actionTaken = true;
 
+    // Light haptic on interaction start (HA standard practice)
+    if (this._config.haptic_feedback !== false) {
+      forwardHaptic('light');
+    }
+
     if (!this.thumbTapped) {
       this.handlePointerMove(e);
     }
@@ -465,10 +500,7 @@ export class RoomCard extends LitElement {
 
     this.sliderValue = Math.max(0, Math.min(1, newValue));
     this.updateVisualOnly();
-
-    if (this._config.haptic_feedback !== false) {
-      forwardHaptic('selection');
-    }
+    // Note: Removed haptic on every move - HA standard is haptic only on start/success
   }
 
   private handlePointerUp(e: PointerEvent) {
@@ -483,7 +515,7 @@ export class RoomCard extends LitElement {
     this.updateDeviceValue();
   }
 
-  private updateDeviceValue() {
+  private async updateDeviceValue() {
     if (this.currentDeviceIndex === -1) return;
 
     const currentDevice = this.devices[this.currentDeviceIndex];
@@ -493,48 +525,58 @@ export class RoomCard extends LitElement {
     const value = this.sliderValue;
     const domain = controlEntity.split('.')[0];
 
-    if (currentDevice.type === "discrete" && currentDevice.modes) {
-      const modes = currentDevice.modes;
-      let selectedMode = modes[0];
-      let minDiff = Math.abs(value - modes[0].value);
+    try {
+      if (currentDevice.type === "discrete" && currentDevice.modes) {
+        const modes = currentDevice.modes;
+        let selectedMode = modes[0];
+        let minDiff = Math.abs(value - modes[0].value);
 
-      for (let i = 1; i < modes.length; i++) {
-        const diff = Math.abs(value - modes[i].value);
-        if (diff < minDiff) {
-          minDiff = diff;
-          selectedMode = modes[i];
+        for (let i = 1; i < modes.length; i++) {
+          const diff = Math.abs(value - modes[i].value);
+          if (diff < minDiff) {
+            minDiff = diff;
+            selectedMode = modes[i];
+          }
+        }
+
+        if (domain === "fan" || domain === "climate") {
+          await this.hass.callService(domain, "set_preset_mode", {
+            entity_id: controlEntity,
+            preset_mode: selectedMode.label,
+          });
+        }
+      } else {
+        const actualValue = Math.round(value * (currentDevice.scale || 255));
+        if (domain === "light") {
+          await this.hass.callService(domain, "turn_on", {
+            entity_id: controlEntity,
+            brightness: actualValue,
+          });
+        } else if (domain === "media_player") {
+          await this.hass.callService(domain, "volume_set", {
+            entity_id: controlEntity,
+            volume_level: value,
+          });
+        } else if (domain === "fan") {
+          await this.hass.callService(domain, "set_percentage", {
+            entity_id: controlEntity,
+            percentage: actualValue,
+          });
+        } else if (domain === "cover") {
+          await this.hass.callService(domain, "set_cover_position", {
+            entity_id: controlEntity,
+            position: actualValue,
+          });
         }
       }
-
-      if (domain === "fan" || domain === "climate") {
-        this.hass.callService(domain, "set_preset_mode", {
-          entity_id: controlEntity,
-          preset_mode: selectedMode.label,
-        });
+      
+      // Haptic feedback on successful service call (HA standard practice)
+      if (this._config.haptic_feedback !== false) {
+        forwardHaptic('success');
       }
-    } else {
-      const actualValue = Math.round(value * (currentDevice.scale || 255));
-      if (domain === "light") {
-        this.hass.callService(domain, "turn_on", {
-          entity_id: controlEntity,
-          brightness: actualValue,
-        });
-      } else if (domain === "media_player") {
-        this.hass.callService(domain, "volume_set", {
-          entity_id: controlEntity,
-          volume_level: value,
-        });
-      } else if (domain === "fan") {
-        this.hass.callService(domain, "set_percentage", {
-          entity_id: controlEntity,
-          percentage: actualValue,
-        });
-      } else if (domain === "cover") {
-        this.hass.callService(domain, "set_cover_position", {
-          entity_id: controlEntity,
-          position: actualValue,
-        });
-      }
+    } catch (error) {
+      console.error('Failed to update device:', error);
+      // Could add error haptic here if desired
     }
   }
 
@@ -658,9 +700,16 @@ export class RoomCard extends LitElement {
     const roomName = this.getAreaName();
 
     const roomNameColor = this._config.room_name_color || DEFAULT_FONT_COLOR;
-    const roomNameSize = this._config.room_name_size || 'clamp(0.75rem, 3.5cqi, 1rem)';
     const displayEntityColor = this._config.display_entity_color || DEFAULT_FONT_COLOR;
-    const displayEntitySize = this._config.display_entity_size || 'clamp(0.65rem, 3cqi, 0.85rem)';
+
+    // Sizing configuration with defaults
+    const chipSize = this._config.chip_size || '2.5rem';
+    const chipIconSize = this._config.chip_icon_size || '1.5rem';
+    const chipGap = this._config.chip_gap || '0.5rem';
+    const iconSize = this._config.icon_size || '5.5rem';
+    const iconSymbolSize = this._config.icon_symbol_size || '3.5rem';
+    const titleSize = this._config.title_size || '1rem';
+    const subtitleSize = this._config.subtitle_size || '0.875rem';
 
     const hasActiveDevice = this.currentDeviceIndex !== -1;
     const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
@@ -709,19 +758,30 @@ export class RoomCard extends LitElement {
       }
     });
 
+    // Build CSS variable overrides
+    const cssVars = `
+      --room-card-chip-size: ${chipSize};
+      --room-card-chip-icon-size: ${chipIconSize};
+      --room-card-chip-gap: ${chipGap};
+      --room-card-icon-size: ${iconSize};
+      --room-card-icon-symbol-size: ${iconSymbolSize};
+      --room-card-title-size: ${titleSize};
+      --room-card-subtitle-size: ${subtitleSize};
+    `;
+
     return html`
       <div
         class="card-container"
-        style="background-color: ${backgroundColor};"
+        style="background-color: ${backgroundColor}; ${cssVars}"
         @click=${this.handleCardClick}
       >
         <div class="main-content">
           <div class="title-section">
-            <div class="room-name" style="color: ${roomNameColor}; font-size: ${roomNameSize}">
+            <div class="room-name" style="color: ${roomNameColor};">
               ${roomName}
             </div>
             ${displayText ? html`
-              <div class="display-entities" style="color: ${displayEntityColor}; font-size: ${displayEntitySize}">
+              <div class="display-entities" style="color: ${displayEntityColor};">
                 ${displayText}
               </div>
             ` : ''}
@@ -767,7 +827,7 @@ export class RoomCard extends LitElement {
                   />
                   <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
-                      <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_on_color || DEFAULT_ICON_ON_COLOR};"></ha-icon>
+                      <ha-icon icon="${this.getDeviceIcon(currentDevice)}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_on_color || DEFAULT_ICON_ON_COLOR};"></ha-icon>
                     </div>
                   </foreignObject>
                 </svg>
@@ -795,7 +855,7 @@ export class RoomCard extends LitElement {
                     style="background-color: ${chipColor};"
                     @click=${() => this.handleChipClick(deviceIndex)}
                   >
-                    <ha-icon icon="${device.icon}" style="color: ${iconColor};"></ha-icon>
+                    <ha-icon icon="${this.getDeviceIcon(device)}" style="color: ${iconColor};"></ha-icon>
                   </div>
                 `;
               })}
@@ -814,14 +874,22 @@ export class RoomCard extends LitElement {
           width: 100%;
           container-type: inline-size;
           container-name: room-card;
-          /* Prevent any overflow from host */
           overflow: hidden;
+          
+          /* Configurable sizing variables with defaults */
+          --room-card-chip-size: 2.5rem;
+          --room-card-chip-icon-size: 1.5rem;
+          --room-card-chip-gap: 0.5rem;
+          --room-card-icon-size: 5.5rem;
+          --room-card-icon-symbol-size: 3.5rem;
+          --room-card-title-size: 1rem;
+          --room-card-subtitle-size: 0.875rem;
         }
 
         .card-container {
           height: 100%;
           width: 100%;
-          border-radius: 1.5rem;
+          border-radius: var(--ha-card-border-radius, 1.5rem);
           display: grid;
           grid-template-areas:
             "title chips"
@@ -848,15 +916,15 @@ export class RoomCard extends LitElement {
           display: flex;
           flex-direction: column;
           align-items: flex-start;
-          padding: 0.625rem 0.5rem 0 0.625rem;
+          padding: 0.75rem 0.5rem 0 0.75rem;
           min-width: 0;
           overflow: hidden;
         }
 
         .room-name {
           font-weight: 500;
-          font-size: 0.875rem;
-          line-height: 1.25;
+          font-size: var(--room-card-title-size);
+          line-height: 1.3;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -864,7 +932,7 @@ export class RoomCard extends LitElement {
         }
 
         /* Allow wrapping on wider cards */
-        @container room-card (min-width: 180px) {
+        @container room-card (min-width: 200px) {
           .room-name {
             white-space: normal;
             display: -webkit-box;
@@ -875,7 +943,7 @@ export class RoomCard extends LitElement {
         }
 
         .display-entities {
-          font-size: 0.75rem;
+          font-size: var(--room-card-subtitle-size);
           font-weight: 400;
           margin-top: 0.125rem;
           overflow: hidden;
@@ -888,23 +956,19 @@ export class RoomCard extends LitElement {
         .icon-section {
           grid-area: icon;
           display: flex;
-          /* Push icon to absolute bottom */
           align-items: flex-end;
           justify-content: flex-start;
           position: relative;
           overflow: visible;
-          /* No padding - let icon sit at the edge */
-          padding: 0;
+          padding: 0 0 0.25rem 0;
         }
 
         .icon-container {
           position: relative;
-          width: 5rem;
-          height: 5rem;
-          /* Position icon to overflow bottom-left corner */
-          margin-left: -0.625rem;
-          margin-bottom: -0.625rem;
-          /* Ensure it stays at bottom */
+          width: var(--room-card-icon-size);
+          height: var(--room-card-icon-size);
+          margin-left: -0.5rem;
+          margin-bottom: -0.5rem;
           flex-shrink: 0;
         }
 
@@ -922,14 +986,15 @@ export class RoomCard extends LitElement {
         }
 
         .icon-background ha-icon {
-          --mdc-icon-size: 3rem;
+          --mdc-icon-size: var(--room-card-icon-symbol-size);
           transition: all 0.3s ease;
         }
 
         .slider-container {
           position: absolute;
-          width: 6.875rem;
-          height: 6.875rem;
+          /* Slider is ~1.36x the icon size */
+          width: calc(var(--room-card-icon-size) * 1.36);
+          height: calc(var(--room-card-icon-size) * 1.36);
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
@@ -948,7 +1013,7 @@ export class RoomCard extends LitElement {
 
         .slider-track {
           fill: none;
-          stroke: rgb(186, 186, 186);
+          stroke: var(--divider-color, rgb(186, 186, 186));
           stroke-width: 10;
           stroke-linecap: round;
           pointer-events: stroke;
@@ -986,23 +1051,23 @@ export class RoomCard extends LitElement {
           grid-area: chips;
           display: flex;
           flex-direction: row;
-          gap: 0.375rem;
-          padding: 0.5rem 0.5rem 0.5rem 0;
+          gap: var(--room-card-chip-gap);
+          padding: 0.625rem 0.625rem 0.625rem 0.25rem;
           align-items: flex-start;
         }
 
         .chips-column {
           display: flex;
           flex-direction: column;
-          gap: 0.375rem;
+          gap: var(--room-card-chip-gap);
         }
 
         .chip {
           display: flex;
           align-items: center;
           justify-content: center;
-          height: 2.25rem;
-          width: 2.25rem;
+          height: var(--room-card-chip-size);
+          width: var(--room-card-chip-size);
           border-radius: 50%;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -1011,67 +1076,19 @@ export class RoomCard extends LitElement {
         }
 
         .chip ha-icon {
-          --mdc-icon-size: 1.375rem;
+          --mdc-icon-size: var(--room-card-chip-icon-size);
         }
 
         .unavailable {
           cursor: not-allowed;
+          opacity: var(--state-unavailable-color, 0.6);
         }
 
         .unavailable:active {
           transform: none;
         }
 
-        /* Scale DOWN only on very small containers to prevent overflow */
-        @container room-card (max-width: 140px) {
-          .title-section {
-            padding: 0.5rem 0.375rem 0 0.5rem;
-          }
-
-          .room-name {
-            font-size: 0.75rem;
-          }
-          
-          .display-entities {
-            font-size: 0.625rem;
-          }
-
-          .icon-container {
-            width: 3.5rem;
-            height: 3.5rem;
-            margin-left: -0.5rem;
-            margin-bottom: -0.5rem;
-          }
-
-          .icon-background ha-icon {
-            --mdc-icon-size: 2rem;
-          }
-
-          .slider-container {
-            width: 5rem;
-            height: 5rem;
-          }
-
-          .chip {
-            height: 1.75rem;
-            width: 1.75rem;
-          }
-
-          .chip ha-icon {
-            --mdc-icon-size: 1rem;
-          }
-
-          .chips-section {
-            gap: 0.25rem;
-            padding: 0.375rem 0.375rem 0.375rem 0;
-          }
-
-          .chips-column {
-            gap: 0.25rem;
-          }
-        }
-
-        /* Hide subtitle on tiny cards */
+        /* Hide subtitle on very small cards */
         @container room-card (max-width: 120px) {
           .display-entities {
             display: none;
