@@ -1,22 +1,36 @@
-export const CARD_VERSION = '2.0.0';
+export const CARD_VERSION = '2.1.0';
 export const CARD_NAME = 'Room Card';
 
-// Use HA theme variables with fallbacks
+// Use HA theme variables with fallbacks (Material You compatible)
 export const DEFAULT_FONT_COLOR = 'var(--primary-text-color)';
 
-// Default chip state colors - using HA theme variables
-export const DEFAULT_CHIP_ON_COLOR = 'var(--paper-item-icon-active-color, #FDD835)';
-export const DEFAULT_CHIP_OFF_COLOR = 'var(--secondary-background-color, rgba(0, 0, 0, 0.2))';
+// Default sizing
+export const DEFAULT_TITLE_SIZE = '1rem';
+export const DEFAULT_SUBTITLE_SIZE = '0.875rem';
+export const DEFAULT_ICON_BACKGROUND_SIZE = '7rem';
+export const DEFAULT_ICON_SIZE = '5rem';
+export const DEFAULT_CHIP_SIZE = '2.75rem';
+export const DEFAULT_CHIP_ICON_SIZE = '1.75rem';
+export const DEFAULT_CHIP_GAP = '0.3rem';
+
+// Default card background - using Material You surface container
+export const DEFAULT_CARD_BACKGROUND = 'var(--ha-card-background, var(--md-sys-color-surface-container-low, var(--card-background-color)))';
+
+// Default icon colors - using Material You on-surface
+export const DEFAULT_ICON_COLOR = 'var(--md-sys-color-on-surface, var(--primary-text-color))';
+export const DEFAULT_ICON_BACKGROUND_COLOR = 'var(--md-sys-color-surface-container, var(--secondary-background-color, rgba(255, 255, 255, 0.1)))';
+
+// Default chip state colors - using Material You theme variables
+export const DEFAULT_CHIP_ON_COLOR = 'var(--md-sys-color-primary, var(--paper-item-icon-active-color, #FDD835))';
+export const DEFAULT_CHIP_OFF_COLOR = 'var(--md-sys-color-surface-container-highest, var(--state-inactive-color, rgba(158, 158, 158, 0.2)))';
 export const DEFAULT_CHIP_UNAVAILABLE_COLOR = 'var(--disabled-color, rgba(128, 128, 128, 0.5))';
 
-// Default icon state colors
-export const DEFAULT_ICON_ON_COLOR = 'var(--text-primary-color, white)';
-export const DEFAULT_ICON_OFF_COLOR = 'var(--secondary-text-color, rgba(255, 255, 255, 0.6))';
+// Default icon state colors - using Material You theme variables
+export const DEFAULT_ICON_ON_COLOR = 'var(--md-sys-color-on-primary, var(--text-primary-color, white))';
+export const DEFAULT_ICON_OFF_COLOR = 'var(--md-sys-color-on-surface-variant, var(--secondary-text-color, rgba(255, 255, 255, 0.6)))';
 export const DEFAULT_ICON_UNAVAILABLE_COLOR = 'var(--disabled-text-color, rgba(255, 255, 255, 0.4))';
 
 // Home Assistant state colors mapped to domains - using HA theme variables
-// Note: The main card uses dynamic CSS variables (var(--state-icon-color)) when possible.
-// These are fallbacks for the editor UI when suggesting default icons/colors.
 export const HA_DOMAIN_COLORS: { [key: string]: string } = {
   alarm_control_panel: 'var(--state-alarm_control_panel-armed_away-color, #F44336)',
   automation: 'var(--state-automation-on-color, #FFC107)',
@@ -45,8 +59,6 @@ export const HA_DOMAIN_COLORS: { [key: string]: string } = {
 };
 
 // Home Assistant standard icons mapped to domains
-// Note: The main card uses stateIcon() from custom-card-helpers for dynamic icon resolution.
-// These are fallbacks for the editor UI when the entity doesn't exist yet.
 export const HA_DOMAIN_ICONS: { [key: string]: string } = {
   alarm_control_panel: 'mdi:shield',
   automation: 'mdi:robot',
@@ -73,3 +85,14 @@ export const HA_DOMAIN_ICONS: { [key: string]: string } = {
   water_heater: 'mdi:water-boiler',
   weather: 'mdi:weather-cloudy',
 };
+
+// Action types for dropdowns
+export const ACTION_TYPES = [
+  { value: 'more-info', label: 'More info' },
+  { value: 'toggle', label: 'Toggle' },
+  { value: 'navigate', label: 'Navigate' },
+  { value: 'url', label: 'URL' },
+  { value: 'perform-action', label: 'Perform action' },
+  { value: 'assist', label: 'Assist' },
+  { value: 'none', label: 'Nothing' },
+];
