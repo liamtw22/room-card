@@ -40,12 +40,28 @@ export class RoomCard extends LitElement {
     return document.createElement('room-card-editor');
   }
 
-  public static getLayoutOptions() {
+  // Standard HA method for Sections view grid sizing
+  public static getGridOptions() {
     return {
-      grid_columns: 2,
-      grid_rows: 2,
-      grid_min_columns: 1,
-      grid_min_rows: 2,
+      columns: 2,
+      rows: 3,
+      min_columns: 1,
+      min_rows: 2,
+    };
+  }
+
+  // Standard HA method for Masonry view sizing
+  public getCardSize(): number {
+    return 3;
+  }
+
+  // Instance method for dynamic grid options based on config
+  public getGridOptions() {
+    return {
+      columns: this._config?.layout_options?.grid_columns || 2,
+      rows: this._config?.layout_options?.grid_rows || 3,
+      min_columns: this._config?.layout_options?.grid_min_columns || 1,
+      min_rows: this._config?.layout_options?.grid_min_rows || 2,
     };
   }
 
@@ -59,11 +75,11 @@ export class RoomCard extends LitElement {
       display_entity_2: '',
       haptic_feedback: true,
       devices: [],
-      // Layout requirements - minimum 3 wide x 2 tall
+      // Layout requirements - default 2 wide x 3 tall, minimum 1 wide x 2 tall
       layout_options: {
-        grid_columns: 3,
-        grid_rows: 2,
-        grid_min_columns: 3,
+        grid_columns: 2,
+        grid_rows: 3,
+        grid_min_columns: 1,
         grid_min_rows: 2,
       },
     };
@@ -81,16 +97,6 @@ export class RoomCard extends LitElement {
     this.devices = config.devices || [];
   }
 
-  public getLayoutOptions() {
-    // Return layout options from config or defaults
-    return this._config?.layout_options || {
-      grid_columns: 3,
-      grid_rows: 2,
-      grid_min_columns: 3,
-      grid_min_rows: 2,
-    };
-  }
-
   protected shouldUpdate(changedProps: PropertyValues): boolean {
     if (!this._config) {
       return false;
@@ -106,6 +112,11 @@ export class RoomCard extends LitElement {
 
     const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
     if (!oldHass) {
+      return true;
+    }
+
+    // Check for theme or language changes (HA standard practice)
+    if (oldHass.themes !== this.hass.themes || oldHass.language !== this.hass.language) {
       return true;
     }
 
@@ -812,16 +823,18 @@ export class RoomCard extends LitElement {
           display: block;
           height: 100%;
           width: 100%;
-          min-height: 140px;
-          min-width: 120px;
           container-type: inline-size;
           container-name: room-card;
+          overflow: hidden;
+          /* Use HA standard font sizing */
+          font-size: var(--ha-card-header-font-size, 14px);
         }
 
         .card-container {
           height: 100%;
           width: 100%;
-          border-radius: 1.5rem;
+          /* Use HA theme variable for border radius */
+          border-radius: var(--ha-card-border-radius, 1.5rem);
           display: grid;
           grid-template-areas:
             "title chips"
@@ -848,15 +861,16 @@ export class RoomCard extends LitElement {
           display: flex;
           flex-direction: column;
           align-items: flex-start;
-          padding: 0.75rem 0.5rem 0 0.75rem;
+          padding: 0.625rem 0.5rem 0 0.625rem;
           min-width: 0;
           overflow: hidden;
         }
 
         .room-name {
           font-weight: 500;
-          font-size: 0.875rem;
-          line-height: 1.25;
+          /* Use HA font size variable with fallback */
+          font-size: var(--paper-font-subhead_-_font-size, 0.875rem);
+          line-height: var(--paper-font-subhead_-_line-height, 1.25);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -875,7 +889,8 @@ export class RoomCard extends LitElement {
         }
 
         .display-entities {
-          font-size: 0.75rem;
+          /* Use HA caption font size */
+          font-size: var(--paper-font-caption_-_font-size, 0.75rem);
           font-weight: 400;
           margin-top: 0.125rem;
           overflow: hidden;
@@ -891,16 +906,17 @@ export class RoomCard extends LitElement {
           align-items: flex-end;
           justify-content: flex-start;
           position: relative;
-          padding-bottom: 0.5rem;
           overflow: visible;
+          padding: 0;
         }
 
         .icon-container {
           position: relative;
-          width: 5.5rem;
-          height: 5.5rem;
-          margin-left: -0.5rem;
-          margin-bottom: -0.5rem;
+          width: 5rem;
+          height: 5rem;
+          margin-left: -0.625rem;
+          margin-bottom: -0.625rem;
+          flex-shrink: 0;
         }
 
         .icon-background {
@@ -917,14 +933,15 @@ export class RoomCard extends LitElement {
         }
 
         .icon-background ha-icon {
-          --mdc-icon-size: 3.5rem;
+          /* Use HA icon size variable */
+          --mdc-icon-size: var(--room-card-icon-size, 3rem);
           transition: all 0.3s ease;
         }
 
         .slider-container {
           position: absolute;
-          width: 7.5rem;
-          height: 7.5rem;
+          width: 6.875rem;
+          height: 6.875rem;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
@@ -943,7 +960,8 @@ export class RoomCard extends LitElement {
 
         .slider-track {
           fill: none;
-          stroke: rgb(186, 186, 186);
+          /* Use HA divider color */
+          stroke: var(--divider-color, rgb(186, 186, 186));
           stroke-width: 10;
           stroke-linecap: round;
           pointer-events: stroke;
@@ -982,7 +1000,7 @@ export class RoomCard extends LitElement {
           display: flex;
           flex-direction: row;
           gap: 0.375rem;
-          padding: 0.5rem 0.5rem 0 0;
+          padding: 0.5rem 0.5rem 0.5rem 0;
           align-items: flex-start;
         }
 
@@ -996,8 +1014,11 @@ export class RoomCard extends LitElement {
           display: flex;
           align-items: center;
           justify-content: center;
-          height: 2.5rem;
-          width: 2.5rem;
+          /* Minimum 44px touch target for accessibility (HA standard) */
+          height: 2.75rem;
+          width: 2.75rem;
+          min-height: 44px;
+          min-width: 44px;
           border-radius: 50%;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -1006,11 +1027,14 @@ export class RoomCard extends LitElement {
         }
 
         .chip ha-icon {
-          --mdc-icon-size: 1.5rem;
+          /* Use HA icon size variable */
+          --mdc-icon-size: var(--mdc-icon-size, 1.5rem);
         }
 
         .unavailable {
           cursor: not-allowed;
+          /* Use HA disabled opacity */
+          opacity: var(--state-unavailable-color, 0.6);
         }
 
         .unavailable:active {
@@ -1018,36 +1042,53 @@ export class RoomCard extends LitElement {
         }
 
         /* Scale DOWN only on very small containers to prevent overflow */
-        @container room-card (max-width: 150px) {
+        /* But maintain minimum 44px touch targets per HA accessibility guidelines */
+        @container room-card (max-width: 140px) {
+          .title-section {
+            padding: 0.5rem 0.375rem 0 0.5rem;
+          }
+
           .room-name {
             font-size: 0.75rem;
           }
           
           .display-entities {
-            font-size: 0.65rem;
+            font-size: 0.625rem;
           }
 
           .icon-container {
-            width: 4rem;
-            height: 4rem;
+            width: 3.5rem;
+            height: 3.5rem;
+            margin-left: -0.5rem;
+            margin-bottom: -0.5rem;
           }
 
           .icon-background ha-icon {
-            --mdc-icon-size: 2.5rem;
+            --mdc-icon-size: 2rem;
           }
 
           .slider-container {
-            width: 5.5rem;
-            height: 5.5rem;
+            width: 5rem;
+            height: 5rem;
           }
 
+          /* Keep chips at minimum 44px for touch accessibility even when small */
           .chip {
-            height: 2rem;
-            width: 2rem;
+            height: 2.75rem;
+            width: 2.75rem;
           }
 
           .chip ha-icon {
-            --mdc-icon-size: 1.125rem;
+            --mdc-icon-size: 1.25rem;
+          }
+
+          .chips-section {
+            gap: 0.25rem;
+            padding: 0.375rem 0.375rem 0.375rem 0;
+          }
+
+          .chips-column {
+            gap: 0.25rem;
           }
         }
 
