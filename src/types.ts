@@ -1,40 +1,50 @@
-export interface RoomCardConfig {
-  type: string;
+import { LovelaceCardConfig, ActionConfig } from 'custom-card-helpers';
+
+export interface RoomCardConfig extends LovelaceCardConfig {
   area: string;
   name?: string;
   icon?: string;
   background?: string | EntityColorConfig;
   icon_color?: string | EntityColorConfig;
   icon_background?: string | EntityColorConfig;
-  
-  // Changed from temperature_sensor and humidity_sensor to generic entity display
+
+  // Icon tap behavior configuration
+  icon_tap_action?: ActionConfig;
+
+  // Display entities for subtitle
   display_entity_1?: string;
   display_entity_2?: string;
   display_entity_1_attribute?: string;
   display_entity_2_attribute?: string;
   display_entity_1_unit?: string;
   display_entity_2_unit?: string;
-  
-  // Deprecated but kept for backwards compatibility
-  temperature_sensor?: string;
-  humidity_sensor?: string;
-  show_temperature?: boolean;
-  show_humidity?: boolean;
-  temperature_unit?: 'F' | 'C';
-  
+
   haptic_feedback?: boolean;
   devices?: DeviceConfig[];
   chip_columns?: number;
-  
-  // Font customization
+
+  // Font customization (colors)
   room_name_color?: string;
-  room_name_size?: string;
   display_entity_color?: string;
-  display_entity_size?: string;
-  
-  // Deprecated but kept for backwards compatibility
-  temp_humidity_color?: string;
-  temp_humidity_size?: string;
+
+  // Sizing configuration
+  title_size?: string;        // e.g., '1rem', '16px'
+  subtitle_size?: string;     // e.g., '0.875rem', '14px'
+  chip_size?: string;         // e.g., '2.5rem', '40px'
+  chip_icon_size?: string;    // e.g., '1.5rem', '24px'
+  chip_gap?: string;          // e.g., '0.5rem', '8px'
+  icon_size?: string;         // e.g., '5.5rem', '88px' - the icon background circle
+  icon_symbol_size?: string;  // e.g., '3.5rem', '56px' - the icon itself
+
+  // Layout options for Home Assistant sections view
+  layout_options?: {
+    grid_columns?: number;
+    grid_rows?: number;
+    grid_min_columns?: number;
+    grid_min_rows?: number;
+    grid_max_columns?: number;
+    grid_max_rows?: number;
+  };
 }
 
 export interface DeviceConfig {
@@ -48,23 +58,22 @@ export interface DeviceConfig {
   modes?: ModeConfig[];
   show_chip?: boolean;
   show_slider?: boolean;
-  
+
+  // Action configuration
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
+
   // Chip state colors
   chip_on_color?: string;
   chip_off_color?: string;
   chip_unavailable_color?: string;
-  
+
   // Icon state colors
   icon_on_color?: string;
   icon_off_color?: string;
   icon_unavailable_color?: string;
-  
-  // Deprecated but kept for backwards compatibility
-  color_on?: string;
-  color_off?: string;
-  color_unavailable?: string;
-  icon_color?: string;
-  
+
   chip_column?: number;
 }
 
