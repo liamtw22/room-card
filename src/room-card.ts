@@ -810,10 +810,8 @@ export class RoomCard extends LitElement {
     return css`
         :host {
           display: block;
-          /* Fill available space - no aspect-ratio constraint */
           height: 100%;
           width: 100%;
-          /* Minimum size requirements */
           min-height: 140px;
           min-width: 120px;
           container-type: inline-size;
@@ -823,12 +821,11 @@ export class RoomCard extends LitElement {
         .card-container {
           height: 100%;
           width: 100%;
-          border-radius: clamp(1rem, 4cqi, 1.5rem);
+          border-radius: 1.5rem;
           display: grid;
           grid-template-areas:
             "title chips"
             "icon chips";
-          /* Title takes minimum needed, icon section fills remaining space */
           grid-template-rows: auto 1fr;
           grid-template-columns: 1fr auto;
           position: relative;
@@ -858,17 +855,16 @@ export class RoomCard extends LitElement {
 
         .room-name {
           font-weight: 500;
-          font-size: clamp(0.8rem, 3.5cqi, 1.1rem);
+          font-size: 0.875rem;
           line-height: 1.25;
-          /* Single line by default, wrap only if needed */
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           max-width: 100%;
         }
 
-        /* Allow wrapping when there's enough width but name is long */
-        @container room-card (min-width: 160px) {
+        /* Allow wrapping on wider cards */
+        @container room-card (min-width: 180px) {
           .room-name {
             white-space: normal;
             display: -webkit-box;
@@ -879,7 +875,7 @@ export class RoomCard extends LitElement {
         }
 
         .display-entities {
-          font-size: clamp(0.7rem, 2.5cqi, 0.85rem);
+          font-size: 0.75rem;
           font-weight: 400;
           margin-top: 0.125rem;
           overflow: hidden;
@@ -892,7 +888,6 @@ export class RoomCard extends LitElement {
         .icon-section {
           grid-area: icon;
           display: flex;
-          /* Align icon to bottom left */
           align-items: flex-end;
           justify-content: flex-start;
           position: relative;
@@ -902,12 +897,10 @@ export class RoomCard extends LitElement {
 
         .icon-container {
           position: relative;
-          /* Fixed sizes with reasonable scaling */
-          width: clamp(3.5rem, 30cqi, 6rem);
-          height: clamp(3.5rem, 30cqi, 6rem);
-          /* Offset to have icon peek out from corner */
-          margin-left: -0.25rem;
-          margin-bottom: -0.25rem;
+          width: 5.5rem;
+          height: 5.5rem;
+          margin-left: -0.5rem;
+          margin-bottom: -0.5rem;
         }
 
         .icon-background {
@@ -924,15 +917,14 @@ export class RoomCard extends LitElement {
         }
 
         .icon-background ha-icon {
-          --mdc-icon-size: clamp(2rem, 20cqi, 4rem);
+          --mdc-icon-size: 3.5rem;
           transition: all 0.3s ease;
         }
 
         .slider-container {
           position: absolute;
-          /* Slider slightly larger than icon */
-          width: clamp(4.5rem, 40cqi, 8rem);
-          height: clamp(4.5rem, 40cqi, 8rem);
+          width: 7.5rem;
+          height: 7.5rem;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
@@ -1004,11 +996,8 @@ export class RoomCard extends LitElement {
           display: flex;
           align-items: center;
           justify-content: center;
-          /* Minimum chip size of 2rem, scales up with container */
-          height: clamp(2rem, 10cqi, 2.75rem);
-          width: clamp(2rem, 10cqi, 2.75rem);
-          min-height: 2rem;
-          min-width: 2rem;
+          height: 2.5rem;
+          width: 2.5rem;
           border-radius: 50%;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -1017,8 +1006,7 @@ export class RoomCard extends LitElement {
         }
 
         .chip ha-icon {
-          /* Icon scales with chip but has minimum */
-          --mdc-icon-size: clamp(1.125rem, 6cqi, 1.5rem);
+          --mdc-icon-size: 1.5rem;
         }
 
         .unavailable {
@@ -1029,8 +1017,42 @@ export class RoomCard extends LitElement {
           transform: none;
         }
 
-        /* Hide display entities on very small cards */
-        @container room-card (max-width: 140px) {
+        /* Scale DOWN only on very small containers to prevent overflow */
+        @container room-card (max-width: 150px) {
+          .room-name {
+            font-size: 0.75rem;
+          }
+          
+          .display-entities {
+            font-size: 0.65rem;
+          }
+
+          .icon-container {
+            width: 4rem;
+            height: 4rem;
+          }
+
+          .icon-background ha-icon {
+            --mdc-icon-size: 2.5rem;
+          }
+
+          .slider-container {
+            width: 5.5rem;
+            height: 5.5rem;
+          }
+
+          .chip {
+            height: 2rem;
+            width: 2rem;
+          }
+
+          .chip ha-icon {
+            --mdc-icon-size: 1.125rem;
+          }
+        }
+
+        /* Hide subtitle on tiny cards */
+        @container room-card (max-width: 120px) {
           .display-entities {
             display: none;
           }
