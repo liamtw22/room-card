@@ -15,6 +15,8 @@ export const DEFAULT_ICON_OFF_COLOR = 'var(--secondary-text-color, rgba(255, 255
 export const DEFAULT_ICON_UNAVAILABLE_COLOR = 'var(--disabled-text-color, rgba(255, 255, 255, 0.4))';
 
 // Home Assistant state colors mapped to domains - using HA theme variables
+// Note: The main card uses dynamic CSS variables (var(--state-icon-color)) when possible.
+// These are fallbacks for the editor UI when suggesting default icons/colors.
 export const HA_DOMAIN_COLORS: { [key: string]: string } = {
   alarm_control_panel: 'var(--state-alarm_control_panel-armed_away-color, #F44336)',
   automation: 'var(--state-automation-on-color, #FFC107)',
@@ -43,6 +45,8 @@ export const HA_DOMAIN_COLORS: { [key: string]: string } = {
 };
 
 // Home Assistant standard icons mapped to domains
+// Note: The main card uses stateIcon() from custom-card-helpers for dynamic icon resolution.
+// These are fallbacks for the editor UI when the entity doesn't exist yet.
 export const HA_DOMAIN_ICONS: { [key: string]: string } = {
   alarm_control_panel: 'mdi:shield',
   automation: 'mdi:robot',
