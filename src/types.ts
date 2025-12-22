@@ -28,6 +28,16 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   room_name_size?: string;
   display_entity_color?: string;
   display_entity_size?: string;
+
+  // Layout options for Home Assistant sections view
+  layout_options?: {
+    grid_columns?: number;
+    grid_rows?: number;
+    grid_min_columns?: number;
+    grid_min_rows?: number;
+    grid_max_columns?: number;
+    grid_max_rows?: number;
+  };
 }
 
 export interface DeviceConfig {
