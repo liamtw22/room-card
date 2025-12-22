@@ -1,10 +1,25 @@
 import { LitElement, html, TemplateResult, PropertyValues, CSSResultGroup, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, forwardHaptic, stateIcon } from 'custom-card-helpers';
+import { HomeAssistant, forwardHaptic, stateIcon, hasAction, handleAction } from 'custom-card-helpers';
 import { HassEntity } from 'home-assistant-js-websocket';
 
-import type { RoomCardConfig, DeviceConfig } from './types';
-import { CARD_VERSION, DEFAULT_FONT_COLOR, DEFAULT_CHIP_ON_COLOR, DEFAULT_CHIP_OFF_COLOR, DEFAULT_CHIP_UNAVAILABLE_COLOR, DEFAULT_ICON_ON_COLOR, DEFAULT_ICON_OFF_COLOR, DEFAULT_ICON_UNAVAILABLE_COLOR } from './const';
+import type { RoomCardConfig, DeviceConfig, ActionHandlerEvent } from './types';
+import { actionHandler } from './action-handler-directive';
+import {
+  CARD_VERSION,
+  DEFAULT_FONT_COLOR,
+  DEFAULT_CHIP_ON_COLOR,
+  DEFAULT_CHIP_OFF_COLOR,
+  DEFAULT_CHIP_UNAVAILABLE_COLOR,
+  DEFAULT_ICON_ON_COLOR,
+  DEFAULT_ICON_OFF_COLOR,
+  DEFAULT_ICON_UNAVAILABLE_COLOR,
+  DEFAULT_CARD_BACKGROUND,
+  DEFAULT_ICON_COLOR,
+  DEFAULT_ICON_BACKGROUND_COLOR,
+  DEFAULT_TITLE_SIZE,
+  DEFAULT_SUBTITLE_SIZE,
+} from './const';
 import './editor';
 
 console.info(
@@ -69,13 +84,18 @@ export class RoomCard extends LitElement {
     return {
       area: '',
       name: '',
-      background: 'var(--ha-card-background)',
+      background: DEFAULT_CARD_BACKGROUND,
       icon: 'mdi:home',
       display_entity_1: '',
       display_entity_2: '',
       haptic_feedback: true,
       devices: [],
-      // Layout requirements - default 2 wide x 3 tall, minimum 1 wide x 2 tall
+      card_tap_action: { action: 'none' },
+      card_hold_action: { action: 'none' },
+      title_tap_action: { action: 'none' },
+      title_hold_action: { action: 'none' },
+      icon_tap_action: { action: 'none' },
+      icon_hold_action: { action: 'none' },
       layout_options: {
         grid_columns: 2,
         grid_rows: 3,
@@ -92,7 +112,7 @@ export class RoomCard extends LitElement {
 
     this._config = {
       ...config,
-      background: config.background !== undefined ? config.background : 'var(--ha-card-background)',
+      background: config.background !== undefined ? config.background : DEFAULT_CARD_BACKGROUND,
     };
     this.devices = config.devices || [];
   }
@@ -246,41 +266,75 @@ export class RoomCard extends LitElement {
     return parts.join(' / ');
   }
 
-  private handleCardClick(e: Event) {
-    if (this.actionTaken) {
-      this.actionTaken = false;
+  // ===== ACTION HANDLERS =====
+
+  private handleCardAction(ev: ActionHandlerEvent) {
+    if (!ev.detail?.action) return;
+    
+    // Ignore if interacting with child elements
+    const target = ev.target as HTMLElement;
+    if (target.closest('.chip') || target.closest('.icon-background') || target.closest('.title-section') || target.closest('.slider-svg')) {
       return;
     }
-
-    const target = e.target as HTMLElement;
-    if (target.closest('.chip') || target.closest('.icon-background') || target.closest('.slider-svg')) {
-      return;
-    }
-
-    const areaId = this._config.area;
-    if (areaId) {
-      window.history.pushState(null, '', `/config/areas/area/${areaId}`);
-      window.dispatchEvent(new CustomEvent('location-changed'));
-    }
-  }
-
-  private handleIconClick(e: Event) {
-    e.stopPropagation();
-    this.actionTaken = true;
 
     if (this._config.haptic_feedback !== false) {
       forwardHaptic('light');
     }
 
-    const areaId = this._config.area;
-    if (areaId) {
-      window.history.pushState(null, '', `/config/areas/area/${areaId}`);
-      window.dispatchEvent(new CustomEvent('location-changed'));
+    const actionConfig = ev.detail.action === 'hold' 
+      ? this._config.card_hold_action 
+      : this._config.card_tap_action;
+
+    if (actionConfig && hasAction(actionConfig)) {
+      handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
     }
   }
 
-  private handleChipClick(deviceIndex: number) {
-    this.actionTaken = true;
+  private handleTitleAction(ev: ActionHandlerEvent) {
+    ev.stopPropagation();
+    if (!ev.detail?.action) return;
+
+    if (this._config.haptic_feedback !== false) {
+      forwardHaptic('light');
+    }
+
+    const actionConfig = ev.detail.action === 'hold'
+      ? this._config.title_hold_action
+      : this._config.title_tap_action;
+
+    if (actionConfig && hasAction(actionConfig)) {
+      handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
+    }
+  }
+
+  private handleIconAction(ev: ActionHandlerEvent) {
+    ev.stopPropagation();
+    if (!ev.detail?.action) return;
+
+    if (this._config.haptic_feedback !== false) {
+      forwardHaptic('light');
+    }
+
+    const actionConfig = ev.detail.action === 'hold'
+      ? this._config.icon_hold_action
+      : this._config.icon_tap_action;
+
+    if (actionConfig && hasAction(actionConfig)) {
+      handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
+    } else {
+      // Default behavior: navigate to area
+      const areaId = this._config.area;
+      if (areaId) {
+        window.history.pushState(null, '', `/config/areas/area/${areaId}`);
+        window.dispatchEvent(new CustomEvent('location-changed'));
+      }
+    }
+  }
+
+  private handleChipAction(ev: ActionHandlerEvent, deviceIndex: number) {
+    ev.stopPropagation();
+    if (!ev.detail?.action) return;
+
     const device = this.devices[deviceIndex];
     const controlEntity = device.control_entity || device.entity;
     const entity = this.hass.states[controlEntity];
@@ -293,19 +347,50 @@ export class RoomCard extends LitElement {
       forwardHaptic('light');
     }
 
-    const isOn = entity.state === "on" || entity.state === "playing";
+    const actionType = ev.detail.action;
+    let actionConfig = device.tap_action;
 
-    if (this.currentDeviceIndex === deviceIndex && isOn) {
-      this.currentDeviceIndex = -1;
-    } else if (isOn) {
-      this.currentDeviceIndex = deviceIndex;
-      this.sliderValue = this.getEntityValue(entity, device);
-    } else {
-      const domain = controlEntity.split('.')[0];
-      this.hass.callService(domain, 'turn_on', {
-        entity_id: controlEntity,
-      });
-      this.currentDeviceIndex = deviceIndex;
+    if (actionType === 'hold') {
+      actionConfig = device.hold_action;
+    } else if (actionType === 'double_tap') {
+      actionConfig = device.double_tap_action;
+    }
+
+    // If custom action is configured, use it
+    if (actionConfig && hasAction(actionConfig)) {
+      const entityConfig = {
+        entity: controlEntity,
+        tap_action: actionConfig,
+        hold_action: actionConfig,
+      };
+      handleAction(this, this.hass, entityConfig, actionType);
+      return;
+    }
+
+    // Default behavior for tap: toggle device and show slider
+    if (actionType === 'tap') {
+      const isOn = entity.state === "on" || entity.state === "playing";
+
+      if (this.currentDeviceIndex === deviceIndex && isOn) {
+        this.currentDeviceIndex = -1;
+      } else if (isOn) {
+        this.currentDeviceIndex = deviceIndex;
+        this.sliderValue = this.getEntityValue(entity, device);
+      } else {
+        const domain = controlEntity.split('.')[0];
+        this.hass.callService(domain, 'turn_on', {
+          entity_id: controlEntity,
+        });
+        this.currentDeviceIndex = deviceIndex;
+      }
+    } else if (actionType === 'hold') {
+      // Default hold: show more-info dialog
+      const entityConfig = {
+        entity: controlEntity,
+        tap_action: { action: 'more-info' as const },
+        hold_action: { action: 'more-info' as const },
+      };
+      handleAction(this, this.hass, entityConfig, 'tap');
     }
   }
 
@@ -352,11 +437,9 @@ export class RoomCard extends LitElement {
     const entity = this.hass.states[entityId];
     
     if (entity) {
-      // stateIcon returns the appropriate icon based on entity state and domain
       return stateIcon(entity) || 'mdi:help-circle';
     }
     
-    // Fallback if entity doesn't exist
     return 'mdi:help-circle';
   }
 
@@ -364,7 +447,7 @@ export class RoomCard extends LitElement {
     if (!entity || entity.state === 'unavailable') {
       return device.chip_unavailable_color || DEFAULT_CHIP_UNAVAILABLE_COLOR;
     }
-    return device.chip_on_color || '#2196F3';
+    return device.chip_on_color || DEFAULT_CHIP_ON_COLOR;
   }
 
   private degreesToRadians(degrees: number): number {
@@ -439,7 +522,6 @@ export class RoomCard extends LitElement {
     this.isDragging = true;
     this.actionTaken = true;
 
-    // Light haptic on interaction start (HA standard practice)
     if (this._config.haptic_feedback !== false) {
       forwardHaptic('light');
     }
@@ -500,7 +582,6 @@ export class RoomCard extends LitElement {
 
     this.sliderValue = Math.max(0, Math.min(1, newValue));
     this.updateVisualOnly();
-    // Note: Removed haptic on every move - HA standard is haptic only on start/success
   }
 
   private handlePointerUp(e: PointerEvent) {
@@ -539,7 +620,10 @@ export class RoomCard extends LitElement {
           }
         }
 
-        if (domain === "fan" || domain === "climate") {
+        // Execute mode-specific action if configured
+        if (selectedMode.action && hasAction(selectedMode.action)) {
+          handleAction(this, this.hass, { entity: controlEntity, tap_action: selectedMode.action }, 'tap');
+        } else if (domain === "fan" || domain === "climate") {
           await this.hass.callService(domain, "set_preset_mode", {
             entity_id: controlEntity,
             preset_mode: selectedMode.label,
@@ -570,23 +654,21 @@ export class RoomCard extends LitElement {
         }
       }
       
-      // Haptic feedback on successful service call (HA standard practice)
       if (this._config.haptic_feedback !== false) {
         forwardHaptic('success');
       }
     } catch (error) {
       console.error('Failed to update device:', error);
-      // Could add error haptic here if desired
     }
   }
 
   private getBackgroundColor(): string {
-    if (!this.hass || !this._config) return "var(--ha-card-background)";
+    if (!this.hass || !this._config) return DEFAULT_CARD_BACKGROUND;
 
     const background = this._config.background;
 
     if (background === undefined || background === null) {
-      return "var(--ha-card-background)";
+      return DEFAULT_CARD_BACKGROUND;
     }
 
     if (background === '') {
@@ -597,7 +679,7 @@ export class RoomCard extends LitElement {
       return background;
     } else if (typeof background === 'object' && background.entity) {
       const entity = this.hass.states[background.entity];
-      if (!entity) return "var(--ha-card-background)";
+      if (!entity) return DEFAULT_CARD_BACKGROUND;
 
       if (background.ranges && background.ranges.length > 0) {
         const value = parseFloat(entity.state);
@@ -618,17 +700,17 @@ export class RoomCard extends LitElement {
         }
       }
 
-      return "var(--ha-card-background)";
+      return DEFAULT_CARD_BACKGROUND;
     }
 
-    return "var(--ha-card-background)";
+    return DEFAULT_CARD_BACKGROUND;
   }
 
   private getIconColor(): string {
-    if (!this.hass || !this._config) return "#FFFFFF";
+    if (!this.hass || !this._config) return DEFAULT_ICON_COLOR;
 
     const iconColor = this._config.icon_color;
-    if (!iconColor) return "#FFFFFF";
+    if (!iconColor) return DEFAULT_ICON_COLOR;
 
     if (typeof iconColor === 'string') {
       return iconColor;
@@ -653,14 +735,14 @@ export class RoomCard extends LitElement {
       }
     }
 
-    return "#FFFFFF";
+    return DEFAULT_ICON_COLOR;
   }
 
   private getIconBackgroundColor(): string {
-    if (!this.hass || !this._config) return "rgba(255, 255, 255, 0.2)";
+    if (!this.hass || !this._config) return DEFAULT_ICON_BACKGROUND_COLOR;
 
     const iconBackground = this._config.icon_background;
-    if (!iconBackground) return "rgba(255, 255, 255, 0.2)";
+    if (!iconBackground) return DEFAULT_ICON_BACKGROUND_COLOR;
 
     if (typeof iconBackground === 'string') {
       return iconBackground;
@@ -685,7 +767,7 @@ export class RoomCard extends LitElement {
       }
     }
 
-    return "rgba(255, 255, 255, 0.2)";
+    return DEFAULT_ICON_BACKGROUND_COLOR;
   }
 
   protected render(): TemplateResult {
@@ -700,9 +782,9 @@ export class RoomCard extends LitElement {
     const roomName = this.getAreaName();
 
     const roomNameColor = this._config.room_name_color || DEFAULT_FONT_COLOR;
-    const roomNameSize = this._config.room_name_size || 'clamp(0.75rem, 3.5cqi, 1rem)';
+    const roomNameSize = this._config.room_name_size || DEFAULT_TITLE_SIZE;
     const displayEntityColor = this._config.display_entity_color || DEFAULT_FONT_COLOR;
-    const displayEntitySize = this._config.display_entity_size || 'clamp(0.65rem, 3cqi, 0.85rem)';
+    const displayEntitySize = this._config.display_entity_size || DEFAULT_SUBTITLE_SIZE;
 
     const hasActiveDevice = this.currentDeviceIndex !== -1;
     const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
@@ -729,7 +811,7 @@ export class RoomCard extends LitElement {
     const progressAngle = this.sliderValue * this.totalAngle;
     const largeArcFlag = progressAngle > 180 ? 1 : 0;
 
-    let sliderColor = '#2196F3';
+    let sliderColor = DEFAULT_CHIP_ON_COLOR;
     if (currentDevice) {
       sliderColor = this.getSliderColor(currentDevice, deviceEntity);
     }
@@ -755,10 +837,21 @@ export class RoomCard extends LitElement {
       <div
         class="card-container"
         style="background-color: ${backgroundColor};"
-        @click=${this.handleCardClick}
+        @action=${this.handleCardAction}
+        .actionHandler=${actionHandler({
+          hasHold: hasAction(this._config.card_hold_action),
+          hasDoubleClick: false,
+        })}
       >
         <div class="main-content">
-          <div class="title-section">
+          <div
+            class="title-section"
+            @action=${this.handleTitleAction}
+            .actionHandler=${actionHandler({
+              hasHold: hasAction(this._config.title_hold_action),
+              hasDoubleClick: false,
+            })}
+          >
             <div class="room-name" style="color: ${roomNameColor}; font-size: ${roomNameSize}">
               ${roomName}
             </div>
@@ -773,7 +866,11 @@ export class RoomCard extends LitElement {
             <div class="icon-container">
               <div class="icon-background"
                    style="background-color: ${iconBackgroundColor};"
-                   @click=${this.handleIconClick}>
+                   @action=${this.handleIconAction}
+                   .actionHandler=${actionHandler({
+                     hasHold: hasAction(this._config.icon_hold_action),
+                     hasDoubleClick: false,
+                   })}>
                 <ha-icon icon="${this._config.icon || 'mdi:home'}" style="color: ${iconColor}"></ha-icon>
               </div>
 
@@ -829,15 +926,19 @@ export class RoomCard extends LitElement {
                 const isOn = entity && (entity.state === "on" || entity.state === "playing");
                 const isUnavailable = !entity || entity.state === 'unavailable';
                 const chipColor = this.getChipColor(device, controlEntity);
-                const iconColor = this.getChipIconColor(device, controlEntity);
+                const chipIconColor = this.getChipIconColor(device, controlEntity);
 
                 return html`
                   <div
                     class="chip ${isUnavailable ? 'unavailable' : ''} ${isOn ? 'on' : 'off'}"
                     style="background-color: ${chipColor};"
-                    @click=${() => this.handleChipClick(deviceIndex)}
+                    @action=${(ev: ActionHandlerEvent) => this.handleChipAction(ev, deviceIndex)}
+                    .actionHandler=${actionHandler({
+                      hasHold: hasAction(device.hold_action),
+                      hasDoubleClick: hasAction(device.double_tap_action),
+                    })}
                   >
-                    <ha-icon icon="${this.getDeviceIcon(device)}" style="color: ${iconColor};"></ha-icon>
+                    <ha-icon icon="${this.getDeviceIcon(device)}" style="color: ${chipIconColor};"></ha-icon>
                   </div>
                 `;
               })}
@@ -869,7 +970,6 @@ export class RoomCard extends LitElement {
             "title chips"
             "icon chips";
           grid-template-rows: auto 1fr;
-          /* Give title more space, constrain chips column */
           grid-template-columns: 1fr auto;
           position: relative;
           transition: background-color 0.3s ease;
@@ -894,6 +994,7 @@ export class RoomCard extends LitElement {
           padding: 0.75rem 0.5rem 0 0.75rem;
           min-width: 0;
           overflow: hidden;
+          cursor: pointer;
         }
 
         .room-name {
@@ -906,7 +1007,6 @@ export class RoomCard extends LitElement {
           max-width: 100%;
         }
 
-        /* Allow wrapping on wider cards */
         @container room-card (min-width: 200px) {
           .room-name {
             white-space: normal;
@@ -940,10 +1040,10 @@ export class RoomCard extends LitElement {
 
         .icon-container {
           position: relative;
-          width: 5.5rem;
-          height: 5.5rem;
-          margin-left: -0.5rem;
-          margin-bottom: -0.5rem;
+          width: 7rem;
+          height: 7rem;
+          margin-left: -1.5rem;
+          margin-bottom: -1.5rem;
           flex-shrink: 0;
         }
 
@@ -961,14 +1061,14 @@ export class RoomCard extends LitElement {
         }
 
         .icon-background ha-icon {
-          --mdc-icon-size: 3.5rem;
+          --mdc-icon-size: 5rem;
           transition: all 0.3s ease;
         }
 
         .slider-container {
           position: absolute;
-          width: 7.5rem;
-          height: 7.5rem;
+          width: 9.375rem;
+          height: 9.375rem;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
@@ -1025,7 +1125,7 @@ export class RoomCard extends LitElement {
           grid-area: chips;
           display: flex;
           flex-direction: row;
-          gap: 0.5rem;
+          gap: 0.3rem;
           padding: 0.625rem 0.625rem 0.625rem 0.25rem;
           align-items: flex-start;
         }
@@ -1033,16 +1133,15 @@ export class RoomCard extends LitElement {
         .chips-column {
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
+          gap: 0.3rem;
         }
 
         .chip {
           display: flex;
           align-items: center;
           justify-content: center;
-          /* Standard chip size - not too large */
-          height: 2.5rem;
-          width: 2.5rem;
+          height: 2.75rem;
+          width: 2.75rem;
           border-radius: 50%;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -1051,7 +1150,7 @@ export class RoomCard extends LitElement {
         }
 
         .chip ha-icon {
-          --mdc-icon-size: 1.5rem;
+          --mdc-icon-size: 1.75rem;
         }
 
         .unavailable {
@@ -1063,7 +1162,6 @@ export class RoomCard extends LitElement {
           transform: none;
         }
 
-        /* Responsive adjustments for smaller containers */
         @container room-card (max-width: 160px) {
           .title-section {
             padding: 0.5rem 0.375rem 0 0.5rem;
@@ -1078,19 +1176,19 @@ export class RoomCard extends LitElement {
           }
 
           .icon-container {
-            width: 4.5rem;
-            height: 4.5rem;
-            margin-left: -0.375rem;
-            margin-bottom: -0.375rem;
+            width: 5.5rem;
+            height: 5.5rem;
+            margin-left: -1rem;
+            margin-bottom: -1rem;
           }
 
           .icon-background ha-icon {
-            --mdc-icon-size: 2.75rem;
+            --mdc-icon-size: 3.5rem;
           }
 
           .slider-container {
-            width: 6rem;
-            height: 6rem;
+            width: 7.5rem;
+            height: 7.5rem;
           }
 
           .chip {
@@ -1103,16 +1201,15 @@ export class RoomCard extends LitElement {
           }
 
           .chips-section {
-            gap: 0.375rem;
+            gap: 0.25rem;
             padding: 0.5rem 0.5rem 0.5rem 0.25rem;
           }
 
           .chips-column {
-            gap: 0.375rem;
+            gap: 0.25rem;
           }
         }
 
-        /* Very small containers */
         @container room-card (max-width: 120px) {
           .display-entities {
             display: none;
@@ -1123,12 +1220,12 @@ export class RoomCard extends LitElement {
           }
 
           .icon-container {
-            width: 3.5rem;
-            height: 3.5rem;
+            width: 4.5rem;
+            height: 4.5rem;
           }
 
           .icon-background ha-icon {
-            --mdc-icon-size: 2rem;
+            --mdc-icon-size: 2.5rem;
           }
 
           .chip {
