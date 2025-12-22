@@ -1,43 +1,44 @@
 export const CARD_VERSION = '2.0.0';
 export const CARD_NAME = 'Room Card';
 
+// Use HA theme variables with fallbacks
 export const DEFAULT_FONT_COLOR = 'var(--primary-text-color)';
 
-// Default chip state colors
-export const DEFAULT_CHIP_ON_COLOR = '#FDD835';
-export const DEFAULT_CHIP_OFF_COLOR = 'rgba(0, 0, 0, 0.2)';
-export const DEFAULT_CHIP_UNAVAILABLE_COLOR = 'rgba(128, 128, 128, 0.5)';
+// Default chip state colors - using HA theme variables
+export const DEFAULT_CHIP_ON_COLOR = 'var(--paper-item-icon-active-color, #FDD835)';
+export const DEFAULT_CHIP_OFF_COLOR = 'var(--secondary-background-color, rgba(0, 0, 0, 0.2))';
+export const DEFAULT_CHIP_UNAVAILABLE_COLOR = 'var(--disabled-color, rgba(128, 128, 128, 0.5))';
 
 // Default icon state colors
-export const DEFAULT_ICON_ON_COLOR = 'white';
-export const DEFAULT_ICON_OFF_COLOR = 'rgba(255, 255, 255, 0.6)';
-export const DEFAULT_ICON_UNAVAILABLE_COLOR = 'rgba(255, 255, 255, 0.4)';
+export const DEFAULT_ICON_ON_COLOR = 'var(--text-primary-color, white)';
+export const DEFAULT_ICON_OFF_COLOR = 'var(--secondary-text-color, rgba(255, 255, 255, 0.6))';
+export const DEFAULT_ICON_UNAVAILABLE_COLOR = 'var(--disabled-text-color, rgba(255, 255, 255, 0.4))';
 
-// Home Assistant state colors mapped to domains
+// Home Assistant state colors mapped to domains - using HA theme variables
 export const HA_DOMAIN_COLORS: { [key: string]: string } = {
-  alarm_control_panel: 'var(--state-alarm-armed-color, #F44336)',
-  automation: 'var(--state-automation-color, #FFC107)',
-  binary_sensor: 'var(--state-binary-sensor-color, #FFC107)',
-  calendar: 'var(--state-calendar-color, #2196F3)',
-  camera: 'var(--state-camera-color, #2196F3)',
+  alarm_control_panel: 'var(--state-alarm_control_panel-armed_away-color, #F44336)',
+  automation: 'var(--state-automation-on-color, #FFC107)',
+  binary_sensor: 'var(--state-binary_sensor-on-color, #FFC107)',
+  calendar: 'var(--state-calendar-on-color, #2196F3)',
+  camera: 'var(--state-camera-streaming-color, #2196F3)',
   climate: 'var(--state-climate-auto-color, #4CAF50)',
-  cover: 'var(--state-cover-color, #9C27B0)',
-  fan: 'var(--state-fan-color, #00BCD4)',
-  group: 'var(--state-group-color, #FFC107)',
-  humidifier: 'var(--state-humidifier-color, #2196F3)',
-  input_boolean: 'var(--state-input-boolean-color, #FFC107)',
-  light: 'var(--state-light-color, #FFC107)',
+  cover: 'var(--state-cover-open-color, #9C27B0)',
+  fan: 'var(--state-fan-on-color, #00BCD4)',
+  group: 'var(--state-group-on-color, #FFC107)',
+  humidifier: 'var(--state-humidifier-on-color, #2196F3)',
+  input_boolean: 'var(--state-input_boolean-on-color, #FFC107)',
+  light: 'var(--state-light-on-color, #FFC107)',
   lock: 'var(--state-lock-locked-color, #4CAF50)',
-  media_player: 'var(--state-media-player-color, #3F51B5)',
+  media_player: 'var(--state-media_player-playing-color, #3F51B5)',
   person: 'var(--state-person-home-color, #4CAF50)',
-  remote: 'var(--state-remote-color, #2196F3)',
-  script: 'var(--state-script-color, #FFC107)',
-  sensor: 'var(--state-sensor-battery-high-color, #4CAF50)',
-  siren: 'var(--state-siren-color, #F44336)',
-  sun: 'var(--state-sun-day-color, #FFC107)',
-  switch: 'var(--state-switch-color, #FFC107)',
-  vacuum: 'var(--state-vacuum-color, #00BCD4)',
-  water_heater: 'var(--state-water-heater-color, #FF9800)',
+  remote: 'var(--state-remote-on-color, #2196F3)',
+  script: 'var(--state-script-on-color, #FFC107)',
+  sensor: 'var(--state-sensor-active-color, #4CAF50)',
+  siren: 'var(--state-siren-on-color, #F44336)',
+  sun: 'var(--state-sun-above_horizon-color, #FFC107)',
+  switch: 'var(--state-switch-on-color, #FFC107)',
+  vacuum: 'var(--state-vacuum-cleaning-color, #00BCD4)',
+  water_heater: 'var(--state-water_heater-on-color, #FF9800)',
   weather: 'var(--state-weather-sunny-color, #FFC107)',
 };
 
