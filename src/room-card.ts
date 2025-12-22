@@ -1,6 +1,6 @@
 import { LitElement, html, TemplateResult, PropertyValues, CSSResultGroup, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, forwardHaptic } from 'custom-card-helpers';
+import { HomeAssistant, forwardHaptic, stateIcon } from 'custom-card-helpers';
 import { HassEntity } from 'home-assistant-js-websocket';
 
 import type { RoomCardConfig, DeviceConfig } from './types';
@@ -341,6 +341,25 @@ export class RoomCard extends LitElement {
     }
   }
 
+  // Get device icon - use configured icon, or fall back to HA's stateIcon for dynamic resolution
+  private getDeviceIcon(device: DeviceConfig): string {
+    if (device.icon) {
+      return device.icon;
+    }
+    
+    // Use HA's stateIcon helper for dynamic icon based on entity state
+    const entityId = device.control_entity || device.entity;
+    const entity = this.hass.states[entityId];
+    
+    if (entity) {
+      // stateIcon returns the appropriate icon based on entity state and domain
+      return stateIcon(entity) || 'mdi:help-circle';
+    }
+    
+    // Fallback if entity doesn't exist
+    return 'mdi:help-circle';
+  }
+
   private getSliderColor(device: DeviceConfig, entity: HassEntity | undefined): string {
     if (!entity || entity.state === 'unavailable') {
       return device.chip_unavailable_color || DEFAULT_CHIP_UNAVAILABLE_COLOR;
@@ -420,6 +439,11 @@ export class RoomCard extends LitElement {
     this.isDragging = true;
     this.actionTaken = true;
 
+    // Light haptic on interaction start (HA standard practice)
+    if (this._config.haptic_feedback !== false) {
+      forwardHaptic('light');
+    }
+
     if (!this.thumbTapped) {
       this.handlePointerMove(e);
     }
@@ -476,10 +500,7 @@ export class RoomCard extends LitElement {
 
     this.sliderValue = Math.max(0, Math.min(1, newValue));
     this.updateVisualOnly();
-
-    if (this._config.haptic_feedback !== false) {
-      forwardHaptic('selection');
-    }
+    // Note: Removed haptic on every move - HA standard is haptic only on start/success
   }
 
   private handlePointerUp(e: PointerEvent) {
@@ -494,7 +515,7 @@ export class RoomCard extends LitElement {
     this.updateDeviceValue();
   }
 
-  private updateDeviceValue() {
+  private async updateDeviceValue() {
     if (this.currentDeviceIndex === -1) return;
 
     const currentDevice = this.devices[this.currentDeviceIndex];
@@ -504,48 +525,58 @@ export class RoomCard extends LitElement {
     const value = this.sliderValue;
     const domain = controlEntity.split('.')[0];
 
-    if (currentDevice.type === "discrete" && currentDevice.modes) {
-      const modes = currentDevice.modes;
-      let selectedMode = modes[0];
-      let minDiff = Math.abs(value - modes[0].value);
+    try {
+      if (currentDevice.type === "discrete" && currentDevice.modes) {
+        const modes = currentDevice.modes;
+        let selectedMode = modes[0];
+        let minDiff = Math.abs(value - modes[0].value);
 
-      for (let i = 1; i < modes.length; i++) {
-        const diff = Math.abs(value - modes[i].value);
-        if (diff < minDiff) {
-          minDiff = diff;
-          selectedMode = modes[i];
+        for (let i = 1; i < modes.length; i++) {
+          const diff = Math.abs(value - modes[i].value);
+          if (diff < minDiff) {
+            minDiff = diff;
+            selectedMode = modes[i];
+          }
+        }
+
+        if (domain === "fan" || domain === "climate") {
+          await this.hass.callService(domain, "set_preset_mode", {
+            entity_id: controlEntity,
+            preset_mode: selectedMode.label,
+          });
+        }
+      } else {
+        const actualValue = Math.round(value * (currentDevice.scale || 255));
+        if (domain === "light") {
+          await this.hass.callService(domain, "turn_on", {
+            entity_id: controlEntity,
+            brightness: actualValue,
+          });
+        } else if (domain === "media_player") {
+          await this.hass.callService(domain, "volume_set", {
+            entity_id: controlEntity,
+            volume_level: value,
+          });
+        } else if (domain === "fan") {
+          await this.hass.callService(domain, "set_percentage", {
+            entity_id: controlEntity,
+            percentage: actualValue,
+          });
+        } else if (domain === "cover") {
+          await this.hass.callService(domain, "set_cover_position", {
+            entity_id: controlEntity,
+            position: actualValue,
+          });
         }
       }
-
-      if (domain === "fan" || domain === "climate") {
-        this.hass.callService(domain, "set_preset_mode", {
-          entity_id: controlEntity,
-          preset_mode: selectedMode.label,
-        });
+      
+      // Haptic feedback on successful service call (HA standard practice)
+      if (this._config.haptic_feedback !== false) {
+        forwardHaptic('success');
       }
-    } else {
-      const actualValue = Math.round(value * (currentDevice.scale || 255));
-      if (domain === "light") {
-        this.hass.callService(domain, "turn_on", {
-          entity_id: controlEntity,
-          brightness: actualValue,
-        });
-      } else if (domain === "media_player") {
-        this.hass.callService(domain, "volume_set", {
-          entity_id: controlEntity,
-          volume_level: value,
-        });
-      } else if (domain === "fan") {
-        this.hass.callService(domain, "set_percentage", {
-          entity_id: controlEntity,
-          percentage: actualValue,
-        });
-      } else if (domain === "cover") {
-        this.hass.callService(domain, "set_cover_position", {
-          entity_id: controlEntity,
-          position: actualValue,
-        });
-      }
+    } catch (error) {
+      console.error('Failed to update device:', error);
+      // Could add error haptic here if desired
     }
   }
 
@@ -778,7 +809,7 @@ export class RoomCard extends LitElement {
                   />
                   <foreignObject x="${thumbX - 10}" y="${thumbY - 10}" width="20" height="20" class="slider-thumb-icon">
                     <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; pointer-events: none;">
-                      <ha-icon icon="${currentDevice.icon}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_on_color || DEFAULT_ICON_ON_COLOR};"></ha-icon>
+                      <ha-icon icon="${this.getDeviceIcon(currentDevice)}" style="--mdc-icon-size: 18px; color: ${currentDevice.icon_on_color || DEFAULT_ICON_ON_COLOR};"></ha-icon>
                     </div>
                   </foreignObject>
                 </svg>
@@ -806,7 +837,7 @@ export class RoomCard extends LitElement {
                     style="background-color: ${chipColor};"
                     @click=${() => this.handleChipClick(deviceIndex)}
                   >
-                    <ha-icon icon="${device.icon}" style="color: ${iconColor};"></ha-icon>
+                    <ha-icon icon="${this.getDeviceIcon(device)}" style="color: ${iconColor};"></ha-icon>
                   </div>
                 `;
               })}
