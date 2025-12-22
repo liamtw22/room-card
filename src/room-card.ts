@@ -42,9 +42,9 @@ export class RoomCard extends LitElement {
 
   public static getLayoutOptions() {
     return {
-      grid_columns: 3,
+      grid_columns: 2,
       grid_rows: 2,
-      grid_min_columns: 3,
+      grid_min_columns: 1,
       grid_min_rows: 2,
     };
   }
