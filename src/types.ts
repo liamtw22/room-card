@@ -8,8 +8,13 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   icon_color?: string | EntityColorConfig;
   icon_background?: string | EntityColorConfig;
 
-  // Icon tap behavior configuration
+  // Tap/hold action configurations for card areas
+  card_tap_action?: ActionConfig;
+  card_hold_action?: ActionConfig;
+  title_tap_action?: ActionConfig;
+  title_hold_action?: ActionConfig;
   icon_tap_action?: ActionConfig;
+  icon_hold_action?: ActionConfig;
 
   // Display entities for subtitle
   display_entity_1?: string;
@@ -52,7 +57,7 @@ export interface DeviceConfig {
   show_chip?: boolean;
   show_slider?: boolean;
 
-  // Action configuration
+  // Chip tap/hold action configuration
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
@@ -74,6 +79,8 @@ export interface ModeConfig {
   label: string;
   value: number;
   percentage: number;
+  // Action for this specific mode (what happens when selected)
+  action?: ActionConfig;
 }
 
 export interface EntityColorConfig {
@@ -86,4 +93,11 @@ export interface ColorRange {
   max?: number;
   state?: string;
   color: string;
+}
+
+// Action handler event type
+export interface ActionHandlerEvent extends Event {
+  detail?: {
+    action: string;
+  };
 }
