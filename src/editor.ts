@@ -13,6 +13,12 @@ import {
   DEFAULT_ICON_BACKGROUND_COLOR,
   DEFAULT_TITLE_SIZE,
   DEFAULT_SUBTITLE_SIZE,
+  DEFAULT_ICON_SIZE,
+  DEFAULT_ICON_BACKGROUND_SIZE,
+  DEFAULT_SLIDER_SIZE,
+  DEFAULT_CHIP_SIZE,
+  DEFAULT_CHIP_ICON_SIZE,
+  DEFAULT_CHIP_GAP,
   HA_DOMAIN_COLORS,
   HA_DOMAIN_ICONS,
 } from './const';
@@ -398,6 +404,53 @@ export class RoomCardEditor extends LitElement {
                     : ''}
                 `}
           </div>
+
+          <div class="subsection">
+            <label>Element Sizing</label>
+            <p class="helper-text">All sizes use rem units for accessibility scaling</p>
+
+            <ha-textfield
+              label="Icon Size"
+              .value=${this._config.icon_size || DEFAULT_ICON_SIZE}
+              @input=${(e: any) => this._updateConfig({ icon_size: e.target.value })}
+              helper="Size of the main icon (e.g., 3.5rem)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Icon Background Size"
+              .value=${this._config.icon_background_size || DEFAULT_ICON_BACKGROUND_SIZE}
+              @input=${(e: any) => this._updateConfig({ icon_background_size: e.target.value })}
+              helper="Size of the icon background circle (e.g., 5.5rem)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Slider Size"
+              .value=${this._config.slider_size || DEFAULT_SLIDER_SIZE}
+              @input=${(e: any) => this._updateConfig({ slider_size: e.target.value })}
+              helper="Size of the circular slider (e.g., 7.5rem)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Chip Size"
+              .value=${this._config.chip_size || DEFAULT_CHIP_SIZE}
+              @input=${(e: any) => this._updateConfig({ chip_size: e.target.value })}
+              helper="Size of device chips (e.g., 2.5rem)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Chip Icon Size"
+              .value=${this._config.chip_icon_size || DEFAULT_CHIP_ICON_SIZE}
+              @input=${(e: any) => this._updateConfig({ chip_icon_size: e.target.value })}
+              helper="Size of icons inside chips (e.g., 1.5rem)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Chip Gap"
+              .value=${this._config.chip_gap || DEFAULT_CHIP_GAP}
+              @input=${(e: any) => this._updateConfig({ chip_gap: e.target.value })}
+              helper="Gap between chips (e.g., 0.5rem)"
+            ></ha-textfield>
+          </div>
         </div>
       </ha-expansion-panel>
     `;
@@ -460,15 +513,35 @@ export class RoomCardEditor extends LitElement {
           <div class="subsection">
             <label>Icon Actions</label>
             <p class="helper-text">Actions for tapping/holding the main icon</p>
-            
+
             <ha-selector
               .hass=${this.hass}
-              .selector=${{ ui_action: {} }}
-              .value=${this._config.icon_tap_action || { action: 'none' }}
-              .label=${'Tap Action'}
+              .selector=${{
+                select: {
+                  options: [
+                    { value: 'slider_rotation', label: 'Rotate through device sliders' },
+                    { value: 'action', label: 'Use custom action' },
+                  ],
+                },
+              }}
+              .value=${this._config.icon_tap_behavior || 'slider_rotation'}
+              .label=${'Icon Tap Behavior'}
               @value-changed=${(e: CustomEvent) =>
-                this._updateConfig({ icon_tap_action: e.detail.value })}
+                this._updateConfig({ icon_tap_behavior: e.detail.value })}
             ></ha-selector>
+
+            ${this._config.icon_tap_behavior === 'action'
+              ? html`
+                  <ha-selector
+                    .hass=${this.hass}
+                    .selector=${{ ui_action: {} }}
+                    .value=${this._config.icon_tap_action || { action: 'none' }}
+                    .label=${'Tap Action'}
+                    @value-changed=${(e: CustomEvent) =>
+                      this._updateConfig({ icon_tap_action: e.detail.value })}
+                  ></ha-selector>
+                `
+              : ''}
 
             <ha-selector
               .hass=${this.hass}
@@ -764,34 +837,23 @@ export class RoomCardEditor extends LitElement {
             .path=${'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z'}
           ></ha-icon-button>
         </div>
+        <p class="helper-text">Modes are evenly distributed on the slider. Position is based on order.</p>
         <div class="modes-list">
           ${modes.map(
             (mode: any, modeIndex: number) => html`
               <div class="mode-item">
-                <div class="mode-inputs">
-                  <ha-textfield
-                    label="Label"
-                    .value=${mode.label || ''}
-                    @input=${(e: any) =>
-                      this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
-                  ></ha-textfield>
-                  <ha-textfield
-                    label="Value (0-1)"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="1"
-                    .value=${mode.value || 0}
-                    @input=${(e: any) =>
-                      this._updateMode(deviceIndex, modeIndex, 'value', parseFloat(e.target.value))}
-                  ></ha-textfield>
-                </div>
+                <ha-textfield
+                  label="Mode ${modeIndex + 1} Label"
+                  .value=${mode.label || ''}
+                  @input=${(e: any) =>
+                    this._updateMode(deviceIndex, modeIndex, 'label', e.target.value)}
+                ></ha-textfield>
                 <div class="mode-action">
                   <ha-selector
                     .hass=${this.hass}
                     .selector=${{ ui_action: {} }}
                     .value=${mode.action || { action: 'none' }}
-                    .label=${'Mode Action'}
+                    .label=${'Action when selected'}
                     @value-changed=${(e: CustomEvent) =>
                       this._updateMode(deviceIndex, modeIndex, 'action', e.detail.value)}
                   ></ha-selector>
@@ -987,8 +1049,6 @@ export class RoomCardEditor extends LitElement {
     const modes = [...(devices[deviceIndex].modes || [])];
     modes.push({
       label: `Mode ${modes.length + 1}`,
-      value: modes.length / Math.max(modes.length, 1),
-      percentage: modes.length * 33,
       action: { action: 'none' },
     });
     devices[deviceIndex] = { ...devices[deviceIndex], modes };
