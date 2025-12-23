@@ -96,13 +96,10 @@ export class RoomCard extends LitElement {
       display_entity_2: '',
       haptic_feedback: true,
       devices: [],
-      icon_tap_behavior: 'slider_rotation',
       card_tap_action: { action: 'none' },
       card_hold_action: { action: 'none' },
       title_tap_action: { action: 'none' },
       title_hold_action: { action: 'none' },
-      icon_tap_action: { action: 'none' },
-      icon_hold_action: { action: 'none' },
       layout_options: {
         grid_columns: 2,
         grid_rows: 3,
@@ -326,35 +323,11 @@ export class RoomCard extends LitElement {
       forwardHaptic('light');
     }
 
-    // Handle hold action
-    if (ev.detail.action === 'hold') {
-      const actionConfig = this._config.icon_hold_action;
-      if (actionConfig && hasAction(actionConfig)) {
-        handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
-      }
-      return;
-    }
-
-    // Handle tap action - check icon_tap_behavior
-    const tapBehavior = this._config.icon_tap_behavior || 'slider_rotation';
-    
-    if (tapBehavior === 'slider_rotation') {
-      // Rotate through active device sliders
+    // Icon tap always rotates through active device sliders
+    if (ev.detail.action === 'tap') {
       this.rotateActiveDeviceSlider();
-    } else {
-      // Use standard action
-      const actionConfig = this._config.icon_tap_action;
-      if (actionConfig && hasAction(actionConfig)) {
-        handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
-      } else {
-        // Default behavior: navigate to area
-        const areaId = this._config.area;
-        if (areaId) {
-          window.history.pushState(null, '', `/config/areas/area/${areaId}`);
-          window.dispatchEvent(new CustomEvent('location-changed'));
-        }
-      }
     }
+    // Hold action is no longer supported - icon tap only rotates sliders
   }
 
   private rotateActiveDeviceSlider() {
@@ -887,7 +860,7 @@ export class RoomCard extends LitElement {
 
     let sliderColor = DEFAULT_CHIP_ON_COLOR;
     if (currentDevice) {
-      sliderColor = this.getSliderColor(currentDevice, deviceEntity);
+      sliderColor = this.getSliderColor(currentDevice, deviceEntity || undefined);
     }
 
     const chipColumns = this._config.chip_columns || 1;
@@ -908,23 +881,24 @@ export class RoomCard extends LitElement {
     });
 
     return html`
-      <div
-        class="card-container"
-        style="
-          background-color: ${backgroundColor};
-          --room-card-icon-size: ${iconSize};
-          --room-card-icon-bg-size: ${iconBgSize};
-          --room-card-slider-size: ${sliderSize};
-          --room-card-chip-size: ${chipSize};
-          --room-card-chip-icon-size: ${chipIconSize};
-          --room-card-chip-gap: ${chipGap};
-        "
-        @action=${this.handleCardAction}
-        .actionHandler=${actionHandler({
-          hasHold: hasAction(this._config.card_hold_action),
-          hasDoubleClick: false,
-        })}
-      >
+      <ha-card>
+        <div
+          class="card-container"
+          style="
+            background-color: ${backgroundColor};
+            --room-card-icon-size: ${iconSize};
+            --room-card-icon-bg-size: ${iconBgSize};
+            --room-card-slider-size: ${sliderSize};
+            --room-card-chip-size: ${chipSize};
+            --room-card-chip-icon-size: ${chipIconSize};
+            --room-card-chip-gap: ${chipGap};
+          "
+          @action=${this.handleCardAction}
+          .actionHandler=${actionHandler({
+            hasHold: hasAction(this._config.card_hold_action),
+            hasDoubleClick: false,
+          })}
+        >
         <div class="main-content">
           <div
             class="title-section"
@@ -1028,6 +1002,7 @@ export class RoomCard extends LitElement {
           `)}
         </div>
       </div>
+      </ha-card>
     `;
   }
 
@@ -1037,15 +1012,27 @@ export class RoomCard extends LitElement {
           display: block;
           height: 100%;
           width: 100%;
+          min-height: var(--room-card-min-height, 120px);
           container-type: inline-size;
           container-name: room-card;
           overflow: hidden;
           font-size: var(--ha-card-header-font-size, 14px);
         }
 
+        ha-card {
+          height: 100%;
+          width: 100%;
+          min-height: inherit;
+          background: transparent;
+          box-shadow: none;
+          border: none;
+          overflow: hidden;
+        }
+
         .card-container {
           height: 100%;
           width: 100%;
+          min-height: inherit;
           border-radius: var(--ha-card-border-radius, 1.5rem);
           display: grid;
           grid-template-areas:
