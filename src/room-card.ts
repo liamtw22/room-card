@@ -19,6 +19,12 @@ import {
   DEFAULT_ICON_BACKGROUND_COLOR,
   DEFAULT_TITLE_SIZE,
   DEFAULT_SUBTITLE_SIZE,
+  DEFAULT_ICON_SIZE,
+  DEFAULT_ICON_BACKGROUND_SIZE,
+  DEFAULT_SLIDER_SIZE,
+  DEFAULT_CHIP_SIZE,
+  DEFAULT_CHIP_ICON_SIZE,
+  DEFAULT_CHIP_GAP,
 } from './const';
 import './editor';
 
@@ -90,6 +96,7 @@ export class RoomCard extends LitElement {
       display_entity_2: '',
       haptic_feedback: true,
       devices: [],
+      icon_tap_behavior: 'slider_rotation',
       card_tap_action: { action: 'none' },
       card_hold_action: { action: 'none' },
       title_tap_action: { action: 'none' },
@@ -198,15 +205,19 @@ export class RoomCard extends LitElement {
   }
 
   private getEntityValue(entity: HassEntity, device: DeviceConfig): number {
-    if (device.type === "discrete" && device.modes) {
+    if (device.type === "discrete" && device.modes && device.modes.length > 0) {
       const modes = device.modes;
       const domain = device.entity.split('.')[0];
 
       if (domain === "fan" || domain === "climate") {
         const currentPreset = entity.attributes.preset_mode;
-        const mode = modes.find(m => m.label === currentPreset);
-        return mode ? mode.value : 0;
+        const modeIndex = modes.findIndex(m => m.label === currentPreset);
+        // Return position as fraction (0 to 1) based on mode index
+        if (modeIndex !== -1) {
+          return modeIndex / (modes.length - 1);
+        }
       }
+      return 0;
     }
 
     const attribute = device.attribute || "brightness";
@@ -315,19 +326,81 @@ export class RoomCard extends LitElement {
       forwardHaptic('light');
     }
 
-    const actionConfig = ev.detail.action === 'hold'
-      ? this._config.icon_hold_action
-      : this._config.icon_tap_action;
-
-    if (actionConfig && hasAction(actionConfig)) {
-      handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
-    } else {
-      // Default behavior: navigate to area
-      const areaId = this._config.area;
-      if (areaId) {
-        window.history.pushState(null, '', `/config/areas/area/${areaId}`);
-        window.dispatchEvent(new CustomEvent('location-changed'));
+    // Handle hold action
+    if (ev.detail.action === 'hold') {
+      const actionConfig = this._config.icon_hold_action;
+      if (actionConfig && hasAction(actionConfig)) {
+        handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
       }
+      return;
+    }
+
+    // Handle tap action - check icon_tap_behavior
+    const tapBehavior = this._config.icon_tap_behavior || 'slider_rotation';
+    
+    if (tapBehavior === 'slider_rotation') {
+      // Rotate through active device sliders
+      this.rotateActiveDeviceSlider();
+    } else {
+      // Use standard action
+      const actionConfig = this._config.icon_tap_action;
+      if (actionConfig && hasAction(actionConfig)) {
+        handleAction(this, this.hass, { ...this._config, tap_action: actionConfig, hold_action: actionConfig }, ev.detail.action);
+      } else {
+        // Default behavior: navigate to area
+        const areaId = this._config.area;
+        if (areaId) {
+          window.history.pushState(null, '', `/config/areas/area/${areaId}`);
+          window.dispatchEvent(new CustomEvent('location-changed'));
+        }
+      }
+    }
+  }
+
+  private rotateActiveDeviceSlider() {
+    // Get indices of active (on) devices that have show_slider enabled
+    const activeDeviceIndices: number[] = [];
+    
+    this.devices.forEach((device, index) => {
+      if (device.show_slider === false) return;
+      
+      const controlEntity = device.control_entity || device.entity;
+      const entity = this.hass.states[controlEntity];
+      
+      if (entity && (entity.state === "on" || entity.state === "playing")) {
+        activeDeviceIndices.push(index);
+      }
+    });
+
+    if (activeDeviceIndices.length === 0) {
+      // No active devices, hide slider
+      this.currentDeviceIndex = -1;
+      return;
+    }
+
+    // Find current position in active devices list
+    const currentPosition = activeDeviceIndices.indexOf(this.currentDeviceIndex);
+    
+    let nextIndex: number;
+    if (currentPosition === -1) {
+      // No slider shown, show first active device
+      nextIndex = activeDeviceIndices[0];
+    } else if (currentPosition === activeDeviceIndices.length - 1) {
+      // At last active device, hide slider (cycle complete)
+      this.currentDeviceIndex = -1;
+      return;
+    } else {
+      // Move to next active device
+      nextIndex = activeDeviceIndices[currentPosition + 1];
+    }
+
+    // Set the new device and update slider value
+    this.currentDeviceIndex = nextIndex;
+    const device = this.devices[nextIndex];
+    const controlEntity = device.control_entity || device.entity;
+    const entity = this.hass.states[controlEntity];
+    if (entity) {
+      this.sliderValue = this.getEntityValue(entity, device);
     }
   }
 
@@ -607,18 +680,11 @@ export class RoomCard extends LitElement {
     const domain = controlEntity.split('.')[0];
 
     try {
-      if (currentDevice.type === "discrete" && currentDevice.modes) {
+      if (currentDevice.type === "discrete" && currentDevice.modes && currentDevice.modes.length > 0) {
         const modes = currentDevice.modes;
-        let selectedMode = modes[0];
-        let minDiff = Math.abs(value - modes[0].value);
-
-        for (let i = 1; i < modes.length; i++) {
-          const diff = Math.abs(value - modes[i].value);
-          if (diff < minDiff) {
-            minDiff = diff;
-            selectedMode = modes[i];
-          }
-        }
+        // Find closest mode based on slider position (0-1 mapped to mode indices)
+        const targetIndex = Math.round(value * (modes.length - 1));
+        const selectedMode = modes[Math.min(targetIndex, modes.length - 1)];
 
         // Execute mode-specific action if configured
         if (selectedMode.action && hasAction(selectedMode.action)) {
@@ -786,6 +852,14 @@ export class RoomCard extends LitElement {
     const displayEntityColor = this._config.display_entity_color || DEFAULT_FONT_COLOR;
     const displayEntitySize = this._config.display_entity_size || DEFAULT_SUBTITLE_SIZE;
 
+    // Sizing options (rem-based)
+    const iconSize = this._config.icon_size || DEFAULT_ICON_SIZE;
+    const iconBgSize = this._config.icon_background_size || DEFAULT_ICON_BACKGROUND_SIZE;
+    const sliderSize = this._config.slider_size || DEFAULT_SLIDER_SIZE;
+    const chipSize = this._config.chip_size || DEFAULT_CHIP_SIZE;
+    const chipIconSize = this._config.chip_icon_size || DEFAULT_CHIP_ICON_SIZE;
+    const chipGap = this._config.chip_gap || DEFAULT_CHIP_GAP;
+
     const hasActiveDevice = this.currentDeviceIndex !== -1;
     const currentDevice = hasActiveDevice ? this.devices[this.currentDeviceIndex] : null;
     const deviceEntity = currentDevice ? this.hass.states[currentDevice.control_entity || currentDevice.entity] : null;
@@ -836,7 +910,15 @@ export class RoomCard extends LitElement {
     return html`
       <div
         class="card-container"
-        style="background-color: ${backgroundColor};"
+        style="
+          background-color: ${backgroundColor};
+          --room-card-icon-size: ${iconSize};
+          --room-card-icon-bg-size: ${iconBgSize};
+          --room-card-slider-size: ${sliderSize};
+          --room-card-chip-size: ${chipSize};
+          --room-card-chip-icon-size: ${chipIconSize};
+          --room-card-chip-gap: ${chipGap};
+        "
         @action=${this.handleCardAction}
         .actionHandler=${actionHandler({
           hasHold: hasAction(this._config.card_hold_action),
@@ -991,7 +1073,7 @@ export class RoomCard extends LitElement {
           display: flex;
           flex-direction: column;
           align-items: flex-start;
-          padding: 0.75rem 0.5rem 0 0.75rem;
+          padding: 0.75rem 0.5rem 0.5rem 0.75rem;
           min-width: 0;
           overflow: hidden;
           cursor: pointer;
@@ -1040,10 +1122,10 @@ export class RoomCard extends LitElement {
 
         .icon-container {
           position: relative;
-          width: 7rem;
-          height: 7rem;
-          margin-left: -1.5rem;
-          margin-bottom: -1.5rem;
+          width: var(--room-card-icon-bg-size, 5.5rem);
+          height: var(--room-card-icon-bg-size, 5.5rem);
+          margin-left: -0.75rem;
+          margin-bottom: -0.75rem;
           flex-shrink: 0;
         }
 
@@ -1061,14 +1143,14 @@ export class RoomCard extends LitElement {
         }
 
         .icon-background ha-icon {
-          --mdc-icon-size: 5rem;
+          --mdc-icon-size: var(--room-card-icon-size, 3.5rem);
           transition: all 0.3s ease;
         }
 
         .slider-container {
           position: absolute;
-          width: 9.375rem;
-          height: 9.375rem;
+          width: var(--room-card-slider-size, 7.5rem);
+          height: var(--room-card-slider-size, 7.5rem);
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
@@ -1125,7 +1207,7 @@ export class RoomCard extends LitElement {
           grid-area: chips;
           display: flex;
           flex-direction: row;
-          gap: 0.3rem;
+          gap: var(--room-card-chip-gap, 0.5rem);
           padding: 0.625rem 0.625rem 0.625rem 0.25rem;
           align-items: flex-start;
         }
@@ -1133,15 +1215,15 @@ export class RoomCard extends LitElement {
         .chips-column {
           display: flex;
           flex-direction: column;
-          gap: 0.3rem;
+          gap: var(--room-card-chip-gap, 0.5rem);
         }
 
         .chip {
           display: flex;
           align-items: center;
           justify-content: center;
-          height: 2.75rem;
-          width: 2.75rem;
+          height: var(--room-card-chip-size, 2.5rem);
+          width: var(--room-card-chip-size, 2.5rem);
           border-radius: 50%;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -1150,7 +1232,7 @@ export class RoomCard extends LitElement {
         }
 
         .chip ha-icon {
-          --mdc-icon-size: 1.75rem;
+          --mdc-icon-size: var(--room-card-chip-icon-size, 1.5rem);
         }
 
         .unavailable {
@@ -1164,7 +1246,7 @@ export class RoomCard extends LitElement {
 
         @container room-card (max-width: 160px) {
           .title-section {
-            padding: 0.5rem 0.375rem 0 0.5rem;
+            padding: 0.5rem 0.375rem 0.375rem 0.5rem;
           }
 
           .room-name {
@@ -1176,37 +1258,37 @@ export class RoomCard extends LitElement {
           }
 
           .icon-container {
-            width: 5.5rem;
-            height: 5.5rem;
-            margin-left: -1rem;
-            margin-bottom: -1rem;
+            width: calc(var(--room-card-icon-bg-size, 5.5rem) * 0.8);
+            height: calc(var(--room-card-icon-bg-size, 5.5rem) * 0.8);
+            margin-left: -0.5rem;
+            margin-bottom: -0.5rem;
           }
 
           .icon-background ha-icon {
-            --mdc-icon-size: 3.5rem;
+            --mdc-icon-size: calc(var(--room-card-icon-size, 3.5rem) * 0.8);
           }
 
           .slider-container {
-            width: 7.5rem;
-            height: 7.5rem;
+            width: calc(var(--room-card-slider-size, 7.5rem) * 0.8);
+            height: calc(var(--room-card-slider-size, 7.5rem) * 0.8);
           }
 
           .chip {
-            height: 2.25rem;
-            width: 2.25rem;
+            height: calc(var(--room-card-chip-size, 2.5rem) * 0.9);
+            width: calc(var(--room-card-chip-size, 2.5rem) * 0.9);
           }
 
           .chip ha-icon {
-            --mdc-icon-size: 1.25rem;
+            --mdc-icon-size: calc(var(--room-card-chip-icon-size, 1.5rem) * 0.85);
           }
 
           .chips-section {
-            gap: 0.25rem;
+            gap: calc(var(--room-card-chip-gap, 0.5rem) * 0.75);
             padding: 0.5rem 0.5rem 0.5rem 0.25rem;
           }
 
           .chips-column {
-            gap: 0.25rem;
+            gap: calc(var(--room-card-chip-gap, 0.5rem) * 0.75);
           }
         }
 
@@ -1220,21 +1302,21 @@ export class RoomCard extends LitElement {
           }
 
           .icon-container {
-            width: 4.5rem;
-            height: 4.5rem;
+            width: calc(var(--room-card-icon-bg-size, 5.5rem) * 0.65);
+            height: calc(var(--room-card-icon-bg-size, 5.5rem) * 0.65);
           }
 
           .icon-background ha-icon {
-            --mdc-icon-size: 2.5rem;
+            --mdc-icon-size: calc(var(--room-card-icon-size, 3.5rem) * 0.6);
           }
 
           .chip {
-            height: 2rem;
-            width: 2rem;
+            height: calc(var(--room-card-chip-size, 2.5rem) * 0.8);
+            width: calc(var(--room-card-chip-size, 2.5rem) * 0.8);
           }
 
           .chip ha-icon {
-            --mdc-icon-size: 1.125rem;
+            --mdc-icon-size: calc(var(--room-card-chip-icon-size, 1.5rem) * 0.75);
           }
         }
     `;
