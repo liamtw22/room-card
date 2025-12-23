@@ -43,8 +43,6 @@ export class RoomCardEditor extends LitElement {
       card_hold_action: { action: 'none' },
       title_tap_action: { action: 'none' },
       title_hold_action: { action: 'none' },
-      icon_tap_action: { action: 'none' },
-      icon_hold_action: { action: 'none' },
       ...config,
     };
   }
@@ -511,46 +509,8 @@ export class RoomCardEditor extends LitElement {
           </div>
 
           <div class="subsection">
-            <label>Icon Actions</label>
-            <p class="helper-text">Actions for tapping/holding the main icon</p>
-
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{
-                select: {
-                  options: [
-                    { value: 'slider_rotation', label: 'Rotate through device sliders' },
-                    { value: 'action', label: 'Use custom action' },
-                  ],
-                },
-              }}
-              .value=${this._config.icon_tap_behavior || 'slider_rotation'}
-              .label=${'Icon Tap Behavior'}
-              @value-changed=${(e: CustomEvent) =>
-                this._updateConfig({ icon_tap_behavior: e.detail.value })}
-            ></ha-selector>
-
-            ${this._config.icon_tap_behavior === 'action'
-              ? html`
-                  <ha-selector
-                    .hass=${this.hass}
-                    .selector=${{ ui_action: {} }}
-                    .value=${this._config.icon_tap_action || { action: 'none' }}
-                    .label=${'Tap Action'}
-                    @value-changed=${(e: CustomEvent) =>
-                      this._updateConfig({ icon_tap_action: e.detail.value })}
-                  ></ha-selector>
-                `
-              : ''}
-
-            <ha-selector
-              .hass=${this.hass}
-              .selector=${{ ui_action: {} }}
-              .value=${this._config.icon_hold_action || { action: 'none' }}
-              .label=${'Hold Action'}
-              @value-changed=${(e: CustomEvent) =>
-                this._updateConfig({ icon_hold_action: e.detail.value })}
-            ></ha-selector>
+            <label>Icon Behavior</label>
+            <p class="helper-text">Tapping the main icon rotates through active device sliders</p>
           </div>
         </div>
       </ha-expansion-panel>
