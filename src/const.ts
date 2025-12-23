@@ -1,4 +1,4 @@
-export const CARD_VERSION = '2.1.0';
+export const CARD_VERSION = '2.2.0';
 export const CARD_NAME = 'Room Card';
 
 // Use HA theme variables with fallbacks (Material You compatible)
