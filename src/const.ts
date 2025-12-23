@@ -4,14 +4,15 @@ export const CARD_NAME = 'Room Card';
 // Use HA theme variables with fallbacks (Material You compatible)
 export const DEFAULT_FONT_COLOR = 'var(--primary-text-color)';
 
-// Default sizing
+// Default sizing (all rem-based, user configurable)
 export const DEFAULT_TITLE_SIZE = '1rem';
 export const DEFAULT_SUBTITLE_SIZE = '0.875rem';
-export const DEFAULT_ICON_BACKGROUND_SIZE = '7rem';
-export const DEFAULT_ICON_SIZE = '5rem';
-export const DEFAULT_CHIP_SIZE = '2.75rem';
-export const DEFAULT_CHIP_ICON_SIZE = '1.75rem';
-export const DEFAULT_CHIP_GAP = '0.3rem';
+export const DEFAULT_ICON_BACKGROUND_SIZE = '5.5rem';
+export const DEFAULT_ICON_SIZE = '3.5rem';
+export const DEFAULT_SLIDER_SIZE = '7.5rem';
+export const DEFAULT_CHIP_SIZE = '2.5rem';
+export const DEFAULT_CHIP_ICON_SIZE = '1.5rem';
+export const DEFAULT_CHIP_GAP = '0.5rem';
 
 // Default card background - using Material You surface container
 export const DEFAULT_CARD_BACKGROUND = 'var(--ha-card-background, var(--md-sys-color-surface-container-low, var(--card-background-color)))';
