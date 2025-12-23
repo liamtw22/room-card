@@ -8,6 +8,9 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   icon_color?: string | EntityColorConfig;
   icon_background?: string | EntityColorConfig;
 
+  // Icon tap behavior - either rotate through active device sliders or use standard action
+  icon_tap_behavior?: 'slider_rotation' | 'action';
+  
   // Tap/hold action configurations for card areas
   card_tap_action?: ActionConfig;
   card_hold_action?: ActionConfig;
@@ -28,11 +31,19 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   devices?: DeviceConfig[];
   chip_columns?: number;
 
-  // Font customization
+  // Typography customization (rem values)
   room_name_color?: string;
   room_name_size?: string;
   display_entity_color?: string;
   display_entity_size?: string;
+
+  // Sizing customization (rem values)
+  icon_size?: string;
+  icon_background_size?: string;
+  slider_size?: string;
+  chip_size?: string;
+  chip_icon_size?: string;
+  chip_gap?: string;
 
   // Layout options for Home Assistant sections view
   layout_options?: {
@@ -77,9 +88,7 @@ export interface DeviceConfig {
 
 export interface ModeConfig {
   label: string;
-  value: number;
-  percentage: number;
-  // Action for this specific mode (what happens when selected)
+  // Action to perform when this mode is selected
   action?: ActionConfig;
 }
 
