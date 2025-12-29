@@ -229,24 +229,6 @@ export class RoomCardEditor extends LitElement {
           </div>
 
           <div class="subsection">
-            <label>Font Size</label>
-
-            <ha-textfield
-              label="Room Name Font Size"
-              .value=${this._config.room_name_size || DEFAULT_TITLE_SIZE}
-              @input=${(e: any) => this._updateConfig({ room_name_size: e.target.value })}
-              helper="CSS size (e.g., 14px, 0.875rem, clamp(...))"
-            ></ha-textfield>
-
-            <ha-textfield
-              label="Subtitle Font Size"
-              .value=${this._config.display_entity_size || DEFAULT_SUBTITLE_SIZE}
-              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
-              helper="CSS size (e.g., 12px, 0.75rem)"
-            ></ha-textfield>
-          </div>
-
-          <div class="subsection">
             <label>Background Color</label>
             ${this._renderColorConfig('background', 'Background', backgroundType, DEFAULT_CARD_BACKGROUND)}
           </div>
@@ -266,45 +248,59 @@ export class RoomCardEditor extends LitElement {
             <p class="helper-text">All sizes use rem units for accessibility scaling</p>
 
             <ha-textfield
+              label="Room Name Font Size"
+              .value=${this._config.room_name_size || DEFAULT_TITLE_SIZE}
+              @input=${(e: any) => this._updateConfig({ room_name_size: e.target.value })}
+              helper="Font size for room name (e.g., 1rem)"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Subtitle Font Size"
+              .value=${this._config.display_entity_size || DEFAULT_SUBTITLE_SIZE}
+              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
+              helper="Font size for subtitle (e.g., 0.875rem)"
+            ></ha-textfield>
+
+            <ha-textfield
               label="Icon Size"
               .value=${this._config.icon_size || DEFAULT_ICON_SIZE}
               @input=${(e: any) => this._updateConfig({ icon_size: e.target.value })}
-              helper="Size of the main icon (e.g., 3.5rem)"
+              helper="Size of the main icon (e.g., 4.5rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Icon Background Size"
               .value=${this._config.icon_background_size || DEFAULT_ICON_BACKGROUND_SIZE}
               @input=${(e: any) => this._updateConfig({ icon_background_size: e.target.value })}
-              helper="Size of the icon background circle (e.g., 5.5rem)"
+              helper="Size of the icon background circle (e.g., 7rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Slider Size"
               .value=${this._config.slider_size || DEFAULT_SLIDER_SIZE}
               @input=${(e: any) => this._updateConfig({ slider_size: e.target.value })}
-              helper="Size of the circular slider (e.g., 7.5rem)"
+              helper="Size of the circular slider (e.g., 9.5rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Chip Size"
               .value=${this._config.chip_size || DEFAULT_CHIP_SIZE}
               @input=${(e: any) => this._updateConfig({ chip_size: e.target.value })}
-              helper="Size of device chips (e.g., 2.5rem)"
+              helper="Size of device chips (e.g., 2.75rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Chip Icon Size"
               .value=${this._config.chip_icon_size || DEFAULT_CHIP_ICON_SIZE}
               @input=${(e: any) => this._updateConfig({ chip_icon_size: e.target.value })}
-              helper="Size of icons inside chips (e.g., 1.5rem)"
+              helper="Size of icons inside chips (e.g., 1.75rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Chip Gap"
               .value=${this._config.chip_gap || DEFAULT_CHIP_GAP}
               @input=${(e: any) => this._updateConfig({ chip_gap: e.target.value })}
-              helper="Gap between chips (e.g., 0.5rem)"
+              helper="Gap between chips (e.g., 0.3rem)"
             ></ha-textfield>
           </div>
         </div>
@@ -587,17 +583,17 @@ export class RoomCardEditor extends LitElement {
 
                   ${isDiscrete ? this._renderModesConfig(device, index) : ''}
 
-                  ${!isDiscrete ? html`
-                    <ha-textfield
-                      label="Attribute"
-                      .value=${device.attribute || ''}
-                      @input=${(e: any) =>
-                        this._deviceValueChanged(index, {
-                          target: { configValue: 'attribute', value: e.target.value },
-                        } as any)}
-                      helper="Entity attribute to control (e.g., brightness, volume_level)"
-                    ></ha-textfield>
+                  <ha-textfield
+                    label="Attribute"
+                    .value=${device.attribute || ''}
+                    @input=${(e: any) =>
+                      this._deviceValueChanged(index, {
+                        target: { configValue: 'attribute', value: e.target.value },
+                      } as any)}
+                    helper="${isDiscrete ? 'Attribute to read mode from (e.g., preset_mode)' : 'Entity attribute to control (e.g., brightness, volume_level)'}"
+                  ></ha-textfield>
 
+                  ${!isDiscrete ? html`
                     <ha-textfield
                       label="Scale"
                       type="number"
@@ -1273,9 +1269,8 @@ export class RoomCardEditor extends LitElement {
         flex-direction: column;
         gap: 8px;
         padding: 12px;
-        background: #ffffff;
+        background: var(--card-background-color);
         border-radius: 8px;
-        border: 1px solid var(--divider-color, #e0e0e0);
       }
 
       .subsection label {
@@ -1360,9 +1355,8 @@ export class RoomCardEditor extends LitElement {
       .modes-section,
       .color-ranges {
         padding: 12px;
-        background: #ffffff;
+        background: var(--secondary-background-color);
         border-radius: 8px;
-        border: 1px solid var(--divider-color, #e0e0e0);
       }
 
       .modes-list,
@@ -1377,9 +1371,8 @@ export class RoomCardEditor extends LitElement {
         flex-direction: column;
         gap: 8px;
         padding: 12px;
-        background: #ffffff;
+        background: var(--card-background-color);
         border-radius: 8px;
-        border: 1px solid var(--divider-color, #e0e0e0);
         position: relative;
       }
 
@@ -1424,20 +1417,13 @@ export class RoomCardEditor extends LitElement {
         flex-direction: column;
         gap: 12px;
         padding: 12px;
-        background: #ffffff;
+        background: var(--secondary-background-color);
         border-radius: 8px;
-        border: 1px solid var(--divider-color, #e0e0e0);
         margin-top: 8px;
       }
 
       ha-expansion-panel {
         margin-top: 8px;
-        --expansion-panel-content-padding: 0;
-        background: #ffffff;
-      }
-
-      ha-expansion-panel::part(header) {
-        background: #ffffff;
       }
 
       ha-icon-button {
