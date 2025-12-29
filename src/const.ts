@@ -1,4 +1,4 @@
-export const CARD_VERSION = '2.2.0';
+export const CARD_VERSION = '2.3.0';
 export const CARD_NAME = 'Room Card';
 
 // Use HA theme variables with fallbacks (Material You compatible)
@@ -7,19 +7,22 @@ export const DEFAULT_FONT_COLOR = 'var(--primary-text-color)';
 // Default sizing (all rem-based, user configurable)
 export const DEFAULT_TITLE_SIZE = '1rem';
 export const DEFAULT_SUBTITLE_SIZE = '0.875rem';
-export const DEFAULT_ICON_BACKGROUND_SIZE = '7rem';
-export const DEFAULT_ICON_SIZE = '4.5rem';
-export const DEFAULT_SLIDER_SIZE = '9.5rem';
-export const DEFAULT_CHIP_SIZE = '2.75rem';
-export const DEFAULT_CHIP_ICON_SIZE = '1.75rem';
-export const DEFAULT_CHIP_GAP = '0.3rem';
+export const DEFAULT_ICON_BACKGROUND_SIZE = '5.5rem';
+export const DEFAULT_ICON_SIZE = '3.5rem';
+export const DEFAULT_SLIDER_SIZE = '7.5rem';
+export const DEFAULT_CHIP_SIZE = '2.5rem';
+export const DEFAULT_CHIP_ICON_SIZE = '1.5rem';
+export const DEFAULT_CHIP_GAP = '0.5rem';
+
+// Default slider debounce (milliseconds)
+export const DEFAULT_SLIDER_DEBOUNCE = 200;
 
 // Default card background - using Material You surface container
 export const DEFAULT_CARD_BACKGROUND = 'var(--ha-card-background, var(--md-sys-color-surface-container-low, var(--card-background-color)))';
 
-// Default icon colors - using Material You on-surface-variant
-export const DEFAULT_ICON_COLOR = 'var(--md-sys-color-on-surface-variant, var(--secondary-text-color, rgba(255, 255, 255, 0.6)))';
-export const DEFAULT_ICON_BACKGROUND_COLOR = 'var(--md-sys-color-surface-container-highest, var(--state-inactive-color, rgba(158, 158, 158, 0.2)))';
+// Default icon colors - using Material You on-surface
+export const DEFAULT_ICON_COLOR = 'var(--md-sys-color-on-surface, var(--primary-text-color))';
+export const DEFAULT_ICON_BACKGROUND_COLOR = 'var(--md-sys-color-surface-container, var(--secondary-background-color, rgba(255, 255, 255, 0.1)))';
 
 // Default chip state colors - using Material You theme variables
 export const DEFAULT_CHIP_ON_COLOR = 'var(--md-sys-color-primary, var(--paper-item-icon-active-color, #FDD835))';
