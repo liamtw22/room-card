@@ -31,10 +31,10 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   devices?: DeviceConfig[];
   chip_columns?: number;
 
-  // Typography customization (rem values)
-  room_name_color?: string;
+  // Typography customization (rem values) - now support entity-based
+  room_name_color?: string | EntityColorConfig;
   room_name_size?: string;
-  display_entity_color?: string;
+  display_entity_color?: string | EntityColorConfig;
   display_entity_size?: string;
 
   // Sizing customization (rem values)
@@ -44,6 +44,9 @@ export interface RoomCardConfig extends LovelaceCardConfig {
   chip_size?: string;
   chip_icon_size?: string;
   chip_gap?: string;
+
+  // Slider debounce
+  slider_debounce?: number;
 
   // Layout options for Home Assistant sections view
   layout_options?: {
@@ -73,17 +76,22 @@ export interface DeviceConfig {
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
 
-  // Chip state colors
-  chip_on_color?: string;
-  chip_off_color?: string;
-  chip_unavailable_color?: string;
+  // Chip state colors - now support entity-based
+  chip_color?: string | EntityColorConfig;
+  chip_on_color?: string;  // Legacy - kept for backward compatibility
+  chip_off_color?: string; // Legacy
+  chip_unavailable_color?: string; // Legacy
 
-  // Icon state colors
-  icon_on_color?: string;
-  icon_off_color?: string;
-  icon_unavailable_color?: string;
+  // Icon state colors - now support entity-based
+  chip_icon_color?: string | EntityColorConfig;
+  icon_on_color?: string;  // Legacy
+  icon_off_color?: string; // Legacy
+  icon_unavailable_color?: string; // Legacy
 
   chip_column?: number;
+  
+  // For ordering in editor
+  order?: number;
 }
 
 export interface ModeConfig {
