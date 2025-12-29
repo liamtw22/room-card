@@ -175,15 +175,23 @@ export class RoomCardEditor extends LitElement {
       backgroundType = 'entity';
     }
 
-    const iconColorType =
-      typeof this._config.icon_color === 'object' && this._config.icon_color?.entity
-        ? 'entity'
-        : 'static';
+    let iconColorType: string = 'static';
+    if (
+      this._config.icon_color &&
+      typeof this._config.icon_color === 'object' &&
+      'entity' in this._config.icon_color
+    ) {
+      iconColorType = 'entity';
+    }
 
-    const iconBgColorType =
-      typeof this._config.icon_background === 'object' && this._config.icon_background?.entity
-        ? 'entity'
-        : 'static';
+    let iconBgColorType: string = 'static';
+    if (
+      this._config.icon_background &&
+      typeof this._config.icon_background === 'object' &&
+      'entity' in this._config.icon_background
+    ) {
+      iconBgColorType = 'entity';
+    }
 
     return html`
       <ha-expansion-panel
@@ -193,7 +201,7 @@ export class RoomCardEditor extends LitElement {
       >
         <div class="section-content">
           <div class="subsection">
-            <label>Typography</label>
+            <label>Font Color</label>
 
             <ha-textfield
               label="Room Name Color"
@@ -203,24 +211,10 @@ export class RoomCardEditor extends LitElement {
             ></ha-textfield>
 
             <ha-textfield
-              label="Room Name Font Size"
-              .value=${this._config.room_name_size || DEFAULT_TITLE_SIZE}
-              @input=${(e: any) => this._updateConfig({ room_name_size: e.target.value })}
-              helper="CSS size (e.g., 14px, 0.875rem, clamp(...))"
-            ></ha-textfield>
-
-            <ha-textfield
               label="Subtitle Color"
               .value=${this._config.display_entity_color || 'var(--primary-text-color)'}
               @input=${(e: any) => this._updateConfig({ display_entity_color: e.target.value })}
               helper="CSS color"
-            ></ha-textfield>
-
-            <ha-textfield
-              label="Subtitle Font Size"
-              .value=${this._config.display_entity_size || DEFAULT_SUBTITLE_SIZE}
-              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
-              helper="CSS size (e.g., 12px, 0.75rem)"
             ></ha-textfield>
           </div>
 
@@ -276,9 +270,7 @@ export class RoomCardEditor extends LitElement {
                       });
                     }}
                   ></ha-selector>
-                  ${this._config.background?.entity
-                    ? this._renderColorRanges('background', this._config.background?.ranges || [])
-                    : ''}
+                  ${this._renderColorRanges('background', this._config.background?.ranges || [])}
                 `}
           </div>
 
@@ -334,9 +326,7 @@ export class RoomCardEditor extends LitElement {
                       });
                     }}
                   ></ha-selector>
-                  ${this._config.icon_color?.entity
-                    ? this._renderColorRanges('icon_color', this._config.icon_color?.ranges || [])
-                    : ''}
+                  ${this._renderColorRanges('icon_color', this._config.icon_color?.ranges || [])}
                 `}
           </div>
 
@@ -394,12 +384,10 @@ export class RoomCardEditor extends LitElement {
                       });
                     }}
                   ></ha-selector>
-                  ${this._config.icon_background?.entity
-                    ? this._renderColorRanges(
-                        'icon_background',
-                        this._config.icon_background?.ranges || [],
-                      )
-                    : ''}
+                  ${this._renderColorRanges(
+                    'icon_background',
+                    this._config.icon_background?.ranges || [],
+                  )}
                 `}
           </div>
 
@@ -408,45 +396,59 @@ export class RoomCardEditor extends LitElement {
             <p class="helper-text">All sizes use rem units for accessibility scaling</p>
 
             <ha-textfield
+              label="Room Name Font Size"
+              .value=${this._config.room_name_size || DEFAULT_TITLE_SIZE}
+              @input=${(e: any) => this._updateConfig({ room_name_size: e.target.value })}
+              helper="CSS size (e.g., 14px, 0.875rem, clamp(...))"
+            ></ha-textfield>
+
+            <ha-textfield
+              label="Subtitle Font Size"
+              .value=${this._config.display_entity_size || DEFAULT_SUBTITLE_SIZE}
+              @input=${(e: any) => this._updateConfig({ display_entity_size: e.target.value })}
+              helper="CSS size (e.g., 12px, 0.75rem)"
+            ></ha-textfield>
+
+            <ha-textfield
               label="Icon Size"
               .value=${this._config.icon_size || DEFAULT_ICON_SIZE}
               @input=${(e: any) => this._updateConfig({ icon_size: e.target.value })}
-              helper="Size of the main icon (e.g., 3.5rem)"
+              helper="Size of the main icon (e.g., 4.5rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Icon Background Size"
               .value=${this._config.icon_background_size || DEFAULT_ICON_BACKGROUND_SIZE}
               @input=${(e: any) => this._updateConfig({ icon_background_size: e.target.value })}
-              helper="Size of the icon background circle (e.g., 5.5rem)"
+              helper="Size of the icon background circle (e.g., 7rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Slider Size"
               .value=${this._config.slider_size || DEFAULT_SLIDER_SIZE}
               @input=${(e: any) => this._updateConfig({ slider_size: e.target.value })}
-              helper="Size of the circular slider (e.g., 7.5rem)"
+              helper="Size of the circular slider (e.g., 9.5rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Chip Size"
               .value=${this._config.chip_size || DEFAULT_CHIP_SIZE}
               @input=${(e: any) => this._updateConfig({ chip_size: e.target.value })}
-              helper="Size of device chips (e.g., 2.5rem)"
+              helper="Size of device chips (e.g., 2.75rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Chip Icon Size"
               .value=${this._config.chip_icon_size || DEFAULT_CHIP_ICON_SIZE}
               @input=${(e: any) => this._updateConfig({ chip_icon_size: e.target.value })}
-              helper="Size of icons inside chips (e.g., 1.5rem)"
+              helper="Size of icons inside chips (e.g., 1.75rem)"
             ></ha-textfield>
 
             <ha-textfield
               label="Chip Gap"
               .value=${this._config.chip_gap || DEFAULT_CHIP_GAP}
               @input=${(e: any) => this._updateConfig({ chip_gap: e.target.value })}
-              helper="Gap between chips (e.g., 0.5rem)"
+              helper="Gap between chips (e.g., 0.3rem)"
             ></ha-textfield>
           </div>
         </div>
